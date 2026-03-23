@@ -70,21 +70,54 @@ def cut_grid(img, rows, cols, start_x=0):
 
 @app.route('/upload_strip', methods=['POST'])
 def upload_strip():
-    files   = request.files.getlist('strips')
-    cols    = int(request.form.get('count', 5))
-    rows    = int(request.form.get('rows', 1))   # new: strip rows
-    start_x = int(request.form.get('start_x', 0))
-    results = []
+    import json as _json
+    files    = request.files.getlist('strips')
+    # segments: [{y1, y2, cols, startX}]
+    segments_raw = request.form.get('segments')
+    if segments_raw:
+        segments = _json.loads(segments_raw)
+    else:
+        # legacy fallback
+        cols    = int(request.form.get('count', 5))
+        rows    = int(request.form.get('rows', 1))
+        start_x = int(request.form.get('start_x', 0))
+        segments = None
 
+    results = []
     for f in files:
         ext      = os.path.splitext(f.filename)[1]
         strip_id = uuid.uuid4().hex
         fname    = f'strip_{strip_id}{ext}'
         path     = os.path.join(app.config['UPLOAD_FOLDER'], fname)
         f.save(path)
+        img = Image.open(path)
+        iw, ih = img.size
+        arr = np.array(img)
 
-        img   = Image.open(path)
-        cards = cut_grid(img, rows=rows, cols=cols, start_x=start_x)
+        if segments:
+            cards = []
+            for seg in segments:
+                y1      = int(seg['y1'])
+                y2      = min(int(seg['y2']), ih)
+                cols    = int(seg['cols'])
+                start_x = int(seg.get('startX', 0))
+                # find right boundary (first dark col from right)
+                arr_row = arr[y1:y2, start_x:, :]
+                col_mean = arr_row.mean(axis=0).mean(axis=1)
+                right_rel = next(
+                    (iw - start_x - 1 - i
+                     for i, v in enumerate(reversed(col_mean.tolist()))
+                     if v > 30),
+                    iw - start_x - 1
+                )
+                x_right = start_x + right_rel + 1
+                cw = (x_right - start_x) // cols
+                for c in range(cols):
+                    x1c = start_x + c * cw
+                    x2c = x1c + cw
+                    cards.append((x1c, y1, x2c, y2))
+        else:
+            cards = cut_grid(img, rows=rows, cols=cols, start_x=start_x)
 
         for i, (x1, y1, x2, y2) in enumerate(cards):
             piece = img.crop((x1, y1, x2, y2))

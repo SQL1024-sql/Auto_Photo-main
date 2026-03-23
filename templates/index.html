@@ -11,7 +11,7 @@ body { font-family: monospace; background: #1a1a1a; color: #e0e0e0; font-size: 1
 .panel-title { color: #777; font-size: 11px; text-transform: uppercase;
   letter-spacing: 1px; margin-bottom: 10px; }
 .row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
-label { color: #999; min-width: 80px; }
+label { color: #999; }
 
 input[type=file] { color: #ccc; background: #222; border: 1px solid #3a3a3a;
   padding: 4px 8px; font-family: monospace; font-size: 13px; }
@@ -31,12 +31,36 @@ button:disabled { opacity: 0.35; cursor: not-allowed; }
 /* Cover */
 #cover-preview img { max-height: 100px; border: 1px solid #333; margin-top: 6px; display: block; }
 
-/* Strip preview */
-.strip-img-box { position: relative; display: inline-block; border: 1px solid #333; }
-.strip-img-box img { display: block; max-width: 100%; max-height: 110px; }
-#cut-line { position: absolute; top: 0; bottom: 0; width: 1px; background: #f44; pointer-events: none; }
+/* Strip image preview with overlay lines */
+#strip-preview-wrap { display:none; margin-bottom:10px; }
+.preview-box {
+  position: relative; display: inline-block;
+  border: 1px solid #333; user-select: none;
+}
+.preview-box img { display: block; max-width: 900px; max-height: 250px; }
+/* vertical cut line (start_x) */
+.v-line {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  background: #f44; pointer-events: none;
+}
+/* horizontal row dividers */
+.h-line {
+  position: absolute; left: 0; right: 0; height: 1px;
+  background: #4af; pointer-events: none; cursor: ns-resize;
+}
 
-/* Two column layout for grid section */
+/* Row config table */
+#row-configs { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.row-cfg {
+  display: flex; align-items: center; gap: 8px;
+  background: #111; padding: 4px 8px; border: 1px solid #222;
+}
+.row-cfg label { color: #666; font-size: 12px; min-width: 0; }
+.row-cfg input[type=number] { width: 60px; }
+.row-cfg button { padding: 2px 8px; font-size: 12px; }
+.row-cfg .range-info { color: #555; font-size: 11px; min-width: 120px; }
+
+/* Two column layout */
 .two-col { display: flex; gap: 12px; align-items: flex-start; }
 
 /* Piece bank */
@@ -65,12 +89,10 @@ button:disabled { opacity: 0.35; cursor: not-allowed; }
   border: 1px solid #2e2e2e; background: #181818;
   display: flex; align-items: center; justify-content: center;
   position: relative; cursor: pointer; overflow: hidden;
-  transition: border-color .1s;
 }
 .grid-cell.selected  { border-color: #c33 !important; outline: 1px solid #c33; }
 .grid-cell.drag-over { border-color: #4a8 !important; outline: 1px solid #4a8; }
 .grid-cell.drag-src  { opacity: 0.25; }
-/* ← 完整顯示圖片，不裁切 */
 .grid-cell img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .grid-cell .cell-no {
   position: absolute; bottom: 2px; left: 3px;
@@ -82,9 +104,8 @@ button:disabled { opacity: 0.35; cursor: not-allowed; }
 .hint { color: #555; font-size: 12px; }
 .log  { color: #666; font-size: 12px; }
 
-/* Result */
 #result-area { display: none; }
-#result-area img { max-width: 600px; border: 1px solid #333; display: block; margin-top: 8px; }
+#result-area img { max-width: 700px; border: 1px solid #333; display: block; margin-top: 8px; }
 a.dl-btn {
   display: inline-block; margin-top: 8px;
   background: #1e3a1e; color: #7c7; border: 1px solid #3a5a3a;
@@ -99,42 +120,47 @@ a.dl-btn {
   <div class="panel-title">1. 封面</div>
   <div class="row">
     <label>封面圖片</label>
-    <input type="file" id="cover-input" accept="image/*">
+    <input type="file" id="cover-input" accept="image/*" style="margin-left:8px;">
   </div>
   <div id="cover-preview"></div>
 </div>
 
-<!-- 2. 造型圖片 -->
+<!-- 2. 造型圖片切割 -->
 <div class="panel">
-  <div class="panel-title">2. 造型圖片（切割設定）</div>
+  <div class="panel-title">2. 造型圖片切割</div>
+
   <div class="row">
-    <label>圖內欄數</label>
-    <input type="number" id="strip-cols" value="5" min="1" max="20" style="width:55px">
-    <label>圖內列數</label>
-    <input type="number" id="strip-rows" value="1" min="1" max="20" style="width:55px">
-    <label style="margin-left:8px;">起始 X</label>
-    <input type="number" id="start-x" value="0" min="0" step="5" style="width:65px" oninput="updateCutPreview()">
-    <span class="hint">px（跳過左側導覽列）</span>
+    <label>上傳圖片（可多張）</label>
+    <input type="file" id="strip-input" accept="image/*" multiple style="margin-left:8px;">
   </div>
 
-  <div id="strip-preview-wrap" style="display:none; margin-bottom:8px;">
-    <div class="strip-img-box">
+  <!-- 預覽 + 設定 -->
+  <div id="strip-preview-wrap">
+    <div class="row" style="margin-bottom:6px;">
+      <label>起始 X</label>
+      <input type="number" id="start-x" value="0" min="0" step="5" style="width:65px" oninput="updatePreviewLines()">
+      <span class="hint">px（紅線左側忽略）</span>
+      <span style="margin-left:16px; color:#666; font-size:12px;">圖片尺寸：<span id="img-size-info">-</span></span>
+    </div>
+
+    <div class="preview-box" id="preview-box">
       <img id="strip-preview-img">
-      <div id="cut-line"></div>
+      <div class="v-line" id="vline-start"></div>
+      <!-- h-lines injected by JS -->
     </div>
-    <div class="row" style="margin-top:4px;">
-      <input type="range" id="start-x-slider" min="0" max="2000" value="0" step="5"
-        style="width:220px; accent-color:#555"
-        oninput="document.getElementById('start-x').value=this.value; updateCutPreview();">
-      <button onclick="recutStrips()">重新切割</button>
-    </div>
-  </div>
 
-  <div class="row">
-    <label>上傳圖片</label>
-    <input type="file" id="strip-input" accept="image/*" multiple>
+    <div style="margin-top:10px;">
+      <div style="color:#666; font-size:12px; margin-bottom:6px;">
+        行分割設定（藍線位置）— 每行單獨設定欄數與 X 起點
+      </div>
+      <div id="row-configs"></div>
+      <div class="row" style="margin-top:6px;">
+        <button onclick="addRowConfig()">＋ 新增一行</button>
+        <button onclick="cutAndLoad()">✂ 切割並載入</button>
+        <span class="log" id="strip-log"></span>
+      </div>
+    </div>
   </div>
-  <div class="log" id="strip-log" style="margin-top:4px;"></div>
 </div>
 
 <!-- 3. 格子編輯 -->
@@ -142,9 +168,9 @@ a.dl-btn {
   <div class="panel-title">3. 格子排版</div>
   <div class="row">
     <label>輸出列數</label>
-    <input type="number" id="grid-rows" value="3" min="1" max="30" style="width:55px">
-    <label>輸出欄數</label>
-    <input type="number" id="grid-cols" value="5" min="1" max="15" style="width:55px">
+    <input type="number" id="grid-rows" value="3" min="1" max="30" style="width:50px">
+    <label style="margin-left:8px;">輸出欄數</label>
+    <input type="number" id="grid-cols" value="9" min="1" max="20" style="width:50px">
     <button onclick="buildGrid()">建立格子</button>
     <button onclick="autoFill()">自動填入</button>
     <span class="log" id="grid-status"></span>
@@ -152,8 +178,8 @@ a.dl-btn {
 
   <div class="two-col" style="margin-top:8px;">
     <div>
-      <div class="log" style="margin-bottom:4px;">造型清單</div>
-      <div id="piece-bank"><span class="hint" style="padding:6px; display:block;">尚無造型</span></div>
+      <div class="log" style="margin-bottom:4px;">造型清單（拖入格子）</div>
+      <div id="piece-bank"><span class="hint" style="padding:6px;display:block;">尚無造型</span></div>
     </div>
     <div id="grid-wrap">
       <div id="grid-table"></div>
@@ -178,63 +204,177 @@ a.dl-btn {
 <script>
 // ─── State ────────────────────────────────────────────────────────────────────
 let coverFilename = null;
-let pieces   = [];       // [{filename}]
-let cells    = [];       // flat, null = empty
-let gridRows = 3, gridCols = 5;
-let CELL_W   = 120;      // display cell px (auto-calculated from cols)
-let CELL_H   = 90;
-let selectedCell = null;
-let dragSrc  = null;
+let pieces        = [];
+let cells         = [];
+let gridRows = 3, gridCols = 9;
+let selectedCell  = null;
+let dragSrc       = null;
+let CELL_W = 120, CELL_H = 90;
+
+// rowConfigs: [{y: px in natural image, cols: int, startX: int}]
+// first row always starts at y=0; each entry defines the START of that row
+// last row ends at image bottom
+let rowConfigs = [];   // [{y, cols, startX}]
+let imgNatW = 0, imgNatH = 0;
 
 // ─── Cover ────────────────────────────────────────────────────────────────────
 document.getElementById('cover-input').addEventListener('change', async function() {
   const file = this.files[0]; if (!file) return;
   const fd = new FormData(); fd.append('cover', file);
-  const data = await (await fetch('/upload_cover', {method:'POST', body:fd})).json();
+  const data = await (await fetch('/upload_cover', {method:'POST',body:fd})).json();
   coverFilename = data.filename;
   document.getElementById('cover-preview').innerHTML =
     `<img src="/image/${coverFilename}?t=${Date.now()}">`;
 });
 
-// ─── Strip ────────────────────────────────────────────────────────────────────
-document.getElementById('strip-input').addEventListener('change', async function() {
+// ─── Strip upload → show preview ──────────────────────────────────────────────
+document.getElementById('strip-input').addEventListener('change', function() {
   if (!this.files.length) return;
-  showStripPreview(this.files[0]);
-  await doStripUpload(this.files);
-});
-
-function showStripPreview(file) {
+  const file = this.files[0];
   const wrap = document.getElementById('strip-preview-wrap');
   const img  = document.getElementById('strip-preview-img');
   img.onload = () => {
-    document.getElementById('start-x-slider').max = img.naturalWidth;
-    updateCutPreview();
+    imgNatW = img.naturalWidth;
+    imgNatH = img.naturalHeight;
+    document.getElementById('img-size-info').textContent = `${imgNatW} × ${imgNatH}`;
+    // default: one row covering whole image
+    if (!rowConfigs.length) {
+      rowConfigs = [{ y: 0, cols: 9, startX: 0 }];
+    }
+    renderRowConfigs();
+    updatePreviewLines();
   };
   img.src = URL.createObjectURL(file);
   wrap.style.display = 'block';
+});
+
+// ─── Row config UI ────────────────────────────────────────────────────────────
+function addRowConfig() {
+  // default new split at midpoint of last row
+  const lastY = rowConfigs.length ? rowConfigs[rowConfigs.length-1].y : 0;
+  const newY  = Math.round((lastY + imgNatH) / 2);
+  rowConfigs.push({ y: newY, cols: 9, startX: 0 });
+  rowConfigs.sort((a,b) => a.y - b.y);
+  renderRowConfigs();
+  updatePreviewLines();
 }
 
-function updateCutPreview() {
-  const img = document.getElementById('strip-preview-img');
-  const sx  = parseInt(document.getElementById('start-x').value) || 0;
-  document.getElementById('start-x-slider').value = sx;
-  if (!img.naturalWidth) return;
-  document.getElementById('cut-line').style.left =
-    (sx * img.offsetWidth / img.naturalWidth) + 'px';
+function removeRowConfig(idx) {
+  if (rowConfigs.length <= 1) return;
+  rowConfigs.splice(idx, 1);
+  renderRowConfigs();
+  updatePreviewLines();
 }
 
-async function doStripUpload(files) {
-  const cols   = parseInt(document.getElementById('strip-cols').value) || 5;
-  const rows   = parseInt(document.getElementById('strip-rows').value) || 1;
-  const startX = parseInt(document.getElementById('start-x').value) || 0;
+function renderRowConfigs() {
+  const container = document.getElementById('row-configs');
+  container.innerHTML = '';
+  rowConfigs.forEach((cfg, i) => {
+    const yEnd = i + 1 < rowConfigs.length ? rowConfigs[i+1].y : imgNatH;
+    const div = document.createElement('div');
+    div.className = 'row-cfg';
+
+    // row label
+    const label = document.createElement('span');
+    label.style.cssText = 'color:#555;font-size:12px;min-width:40px;';
+    label.textContent = `行 ${i+1}`;
+
+    // Y start
+    const yLabel = document.createElement('label'); yLabel.textContent = 'Y起點';
+    const yInput = document.createElement('input');
+    yInput.type = 'number'; yInput.value = cfg.y; yInput.min = 0; yInput.max = imgNatH;
+    yInput.style.width = '65px';
+    yInput.addEventListener('input', () => {
+      rowConfigs[i].y = parseInt(yInput.value) || 0;
+      rowConfigs.sort((a,b) => a.y - b.y);
+      renderRowConfigs();
+      updatePreviewLines();
+    });
+
+    // cols
+    const cLabel = document.createElement('label'); cLabel.textContent = '欄數';
+    const cInput = document.createElement('input');
+    cInput.type = 'number'; cInput.value = cfg.cols; cInput.min = 1; cInput.max = 30;
+    cInput.style.width = '55px';
+    cInput.addEventListener('input', () => { rowConfigs[i].cols = parseInt(cInput.value)||1; });
+
+    // startX override
+    const sLabel = document.createElement('label'); sLabel.textContent = '起始X';
+    const sInput = document.createElement('input');
+    sInput.type = 'number'; sInput.value = cfg.startX; sInput.min = 0;
+    sInput.style.width = '60px';
+    sInput.addEventListener('input', () => {
+      rowConfigs[i].startX = parseInt(sInput.value)||0;
+      updatePreviewLines();
+    });
+
+    // range info
+    const info = document.createElement('span');
+    info.className = 'range-info';
+    info.textContent = `y ${cfg.y} → ${yEnd}  (h=${yEnd-cfg.y})`;
+
+    // delete btn
+    const del = document.createElement('button');
+    del.textContent = '✕'; del.style.cssText = 'padding:2px 7px;font-size:12px;';
+    del.onclick = () => removeRowConfig(i);
+    if (rowConfigs.length <= 1) del.disabled = true;
+
+    div.append(label, yLabel, yInput, cLabel, cInput, sLabel, sInput, info, del);
+    container.appendChild(div);
+  });
+}
+
+// ─── Preview overlay lines ────────────────────────────────────────────────────
+function updatePreviewLines() {
+  const img  = document.getElementById('strip-preview-img');
+  const box  = document.getElementById('preview-box');
+  if (!imgNatW) return;
+  const scaleX = img.offsetWidth  / imgNatW;
+  const scaleY = img.offsetHeight / imgNatH;
+
+  // vertical start-x line
+  const sx = parseInt(document.getElementById('start-x').value) || 0;
+  document.getElementById('vline-start').style.left = (sx * scaleX) + 'px';
+
+  // remove old h-lines
+  box.querySelectorAll('.h-line').forEach(el => el.remove());
+  // add h-lines for row splits (skip row 0 which is always at top)
+  rowConfigs.forEach((cfg, i) => {
+    if (i === 0) return; // first row starts at 0, no line needed
+    const line = document.createElement('div');
+    line.className = 'h-line';
+    line.style.top = (cfg.y * scaleY) + 'px';
+    line.title = `行 ${i+1} 起點 y=${cfg.y}`;
+    box.appendChild(line);
+  });
+}
+
+window.addEventListener('resize', updatePreviewLines);
+
+// ─── Cut and load ─────────────────────────────────────────────────────────────
+async function cutAndLoad() {
+  const input = document.getElementById('strip-input');
+  if (!input.files.length) { alert('請先上傳圖片'); return; }
+
+  const globalStartX = parseInt(document.getElementById('start-x').value) || 0;
+
+  // Build segment list for ALL uploaded files
+  // Each file uses same rowConfigs
+  const segments = rowConfigs.map((cfg, i) => ({
+    y1: cfg.y,
+    y2: i + 1 < rowConfigs.length ? rowConfigs[i+1].y : imgNatH,
+    cols: cfg.cols,
+    startX: cfg.startX || globalStartX
+  }));
+
   const fd = new FormData();
-  for (const f of files) fd.append('strips', f);
-  fd.append('count', cols);
-  fd.append('rows', rows);
-  fd.append('start_x', startX);
+  for (const f of input.files) fd.append('strips', f);
+  fd.append('segments', JSON.stringify(segments));
 
   document.getElementById('strip-log').textContent = '切割中...';
   const data = await (await fetch('/upload_strip', {method:'POST', body:fd})).json();
+  if (data.error) { alert(data.error); return; }
+
   for (const fn of data.pieces) pieces.push({filename: fn});
   document.getElementById('strip-log').textContent =
     `本次切出 ${data.pieces.length} 個，共 ${pieces.length} 個`;
@@ -242,20 +382,12 @@ async function doStripUpload(files) {
   updateGridStatus();
 }
 
-async function recutStrips() {
-  const input = document.getElementById('strip-input');
-  if (!input.files.length) return;
-  pieces = []; cells = cells.map(() => null);
-  await doStripUpload(input.files);
-  renderGrid();
-}
-
 // ─── Bank ─────────────────────────────────────────────────────────────────────
 function renderBank() {
   const bank = document.getElementById('piece-bank');
   bank.innerHTML = '';
   if (!pieces.length) {
-    bank.innerHTML = '<span class="hint" style="padding:6px; display:block;">尚無造型</span>'; return;
+    bank.innerHTML = '<span class="hint" style="padding:6px;display:block;">尚無造型</span>'; return;
   }
   const usedSet = new Set(cells.filter(Boolean));
   pieces.forEach((p, i) => {
@@ -273,18 +405,17 @@ function renderBank() {
 
 // ─── Grid ─────────────────────────────────────────────────────────────────────
 function calcCellSize() {
-  // fit grid into available width ~780px
-  const maxW = Math.min(780, window.innerWidth - 200);
+  const maxW = Math.min(800, window.innerWidth - 180);
   CELL_W = Math.floor(maxW / gridCols);
-  CELL_H = Math.round(CELL_W * 1.4); // approx card aspect ratio
+  CELL_H = Math.round(CELL_W * 1.5);
 }
 
 function buildGrid() {
   gridRows = parseInt(document.getElementById('grid-rows').value) || 3;
-  gridCols = parseInt(document.getElementById('grid-cols').value) || 5;
+  gridCols = parseInt(document.getElementById('grid-cols').value) || 9;
   const old = cells.slice();
   cells = Array(gridRows * gridCols).fill(null);
-  old.forEach((v, i) => { if (i < cells.length) cells[i] = v; });
+  old.forEach((v,i) => { if (i < cells.length) cells[i] = v; });
   selectedCell = null;
   calcCellSize();
   renderGrid();
@@ -296,19 +427,14 @@ function renderGrid() {
   const table = document.getElementById('grid-table');
   table.style.gridTemplateColumns = `repeat(${gridCols}, ${CELL_W}px)`;
   table.innerHTML = '';
-
   cells.forEach((filename, i) => {
     const el = document.createElement('div');
     el.className = 'grid-cell' + (selectedCell === i ? ' selected' : '');
     el.style.width  = CELL_W + 'px';
     el.style.height = CELL_H + 'px';
-
-    if (filename) {
-      el.innerHTML = `<img src="/image/${filename}"><span class="cell-no">${i+1}</span>`;
-    } else {
-      el.innerHTML = `<span class="empty-no">${i+1}</span>`;
-    }
-
+    el.innerHTML = filename
+      ? `<img src="/image/${filename}"><span class="cell-no">${i+1}</span>`
+      : `<span class="empty-no">${i+1}</span>`;
     el.addEventListener('click', () => {
       selectedCell = selectedCell === i ? null : i;
       renderGrid();
@@ -320,36 +446,34 @@ function renderGrid() {
       el.classList.add('drag-src');
       e.dataTransfer.effectAllowed = 'move';
     });
-    el.addEventListener('dragend',  () => el.classList.remove('drag-src'));
-    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
-    el.addEventListener('dragleave',() => el.classList.remove('drag-over'));
-    el.addEventListener('drop', e  => { e.preventDefault(); el.classList.remove('drag-over'); handleDrop(i); });
+    el.addEventListener('dragend',   () => el.classList.remove('drag-src'));
+    el.addEventListener('dragover',  e => { e.preventDefault(); el.classList.add('drag-over'); });
+    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+    el.addEventListener('drop', e => {
+      e.preventDefault(); el.classList.remove('drag-over'); handleDrop(i);
+    });
     table.appendChild(el);
   });
 }
 
 function handleDrop(targetIdx) {
   if (!dragSrc) return;
-  if (dragSrc.type === 'bank') {
-    cells[targetIdx] = pieces[dragSrc.idx].filename;
-  } else {
-    [cells[targetIdx], cells[dragSrc.idx]] = [cells[dragSrc.idx], cells[targetIdx]];
-  }
+  if (dragSrc.type === 'bank') cells[targetIdx] = pieces[dragSrc.idx].filename;
+  else [cells[targetIdx], cells[dragSrc.idx]] = [cells[dragSrc.idx], cells[targetIdx]];
   dragSrc = null;
   renderGrid(); renderBank(); updateGridStatus();
 }
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Backspace' && selectedCell !== null) {
-    cells[selectedCell] = null;
-    selectedCell = null;
+    cells[selectedCell] = null; selectedCell = null;
     renderGrid(); renderBank(); updateGridStatus();
   }
 });
 
 function autoFill() {
   const usedSet = new Set(cells.filter(Boolean));
-  const queue = pieces.map(p => p.filename).filter(fn => !usedSet.has(fn));
+  const queue = pieces.map(p=>p.filename).filter(fn=>!usedSet.has(fn));
   let qi = 0;
   for (let i = 0; i < cells.length && qi < queue.length; i++) {
     if (!cells[i]) cells[i] = queue[qi++];
@@ -365,28 +489,28 @@ function updateGridStatus() {
 
 // ─── Generate ─────────────────────────────────────────────────────────────────
 async function generateResult() {
-  if (!coverFilename && cells.every(c => !c)) { alert('請上傳封面或放入造型'); return; }
+  if (!coverFilename && cells.every(c=>!c)) { alert('請上傳封面或放入造型'); return; }
   document.getElementById('finish-btn').disabled = true;
   document.getElementById('gen-log').textContent = '生成中...';
-  const res  = await fetch('/generate', {
+  const res = await fetch('/generate', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ cover: coverFilename, cells, grid_rows: gridRows, grid_cols: gridCols })
+    body: JSON.stringify({cover:coverFilename, cells, grid_rows:gridRows, grid_cols:gridCols})
   });
   const data = await res.json();
   document.getElementById('finish-btn').disabled = false;
   document.getElementById('gen-log').textContent = '';
-  if (data.error) { alert('錯誤: ' + data.error); return; }
+  if (data.error) { alert('錯誤: '+data.error); return; }
   const area = document.getElementById('result-area');
   area.style.display = 'block';
-  document.getElementById('result-img').src = 'data:image/jpeg;base64,' + data.preview;
-  document.getElementById('download-btn').href = '/download/' + data.filename;
+  document.getElementById('result-img').src = 'data:image/jpeg;base64,'+data.preview;
+  document.getElementById('download-btn').href = '/download/'+data.filename;
   document.getElementById('download-btn').download = data.filename;
   area.scrollIntoView({behavior:'smooth'});
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 buildGrid();
-window.addEventListener('resize', () => { if (cells.length) renderGrid(); });
+window.addEventListener('resize', () => { if(cells.length) renderGrid(); });
 </script>
 </body>
 </html>
