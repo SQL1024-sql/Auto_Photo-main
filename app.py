@@ -1,199 +1,107 @@
-from flask import Flask, request, jsonify, render_template, send_file
+from flask import Flask, request, jsonify, render_template, send_from_directory
 from PIL import Image
 import os, uuid, io, base64
-import numpy as np
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
-app.config['OUTPUT_FOLDER'] = os.path.join(os.path.dirname(__file__), 'outputs')
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
+UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# 你提供的精確 X 座標與高度
+BOXES_X = [(512, 751), (770, 1009), (1028, 1265), (1285, 1524), (1543, 1781)]
+FIXED_HEIGHT = 437  # 包含「已擁有」區塊的高度
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
+@app.route('/image/<filename>')
+def serve_image(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
 @app.route('/upload_cover', methods=['POST'])
 def upload_cover():
     f = request.files.get('cover')
-    if not f:
-        return jsonify({'error': 'No file'}), 400
-    ext = os.path.splitext(f.filename)[1]
-    fname = f'cover_{uuid.uuid4().hex}{ext}'
+    if not f: return jsonify({'error': 'No file'}), 400
+    fname = f'cover_{uuid.uuid4().hex}.png'
     f.save(os.path.join(app.config['UPLOAD_FOLDER'], fname))
     return jsonify({'filename': fname})
 
-
-def find_content_bounds(arr, threshold=40):
-    """Find bounding box of non-dark content pixels."""
-    h, w = arr.shape[:2]
-    col_mean = arr.mean(axis=0).mean(axis=1)
-    row_mean = arr.mean(axis=1).mean(axis=1)
-    left   = next((i for i in range(w)     if col_mean[i] > threshold), 0)
-    right  = next((i for i in range(w-1,0,-1) if col_mean[i] > threshold), w-1)
-    top    = next((i for i in range(h)     if row_mean[i] > threshold), 0)
-    bottom = next((i for i in range(h-1,0,-1) if row_mean[i] > threshold), h-1)
-    return left, top, right, bottom
-
-
-def cut_grid(img, rows, cols, start_x=0):
-    """
-    Cut image into rows×cols equal cells.
-    start_x: skip left nav bar.
-    Finds content boundary automatically, then equal-splits.
-    Returns list of (x1,y1,x2,y2).
-    """
-    arr = np.array(img)
-    h, w = arr.shape[:2]
-
-    # Find content boundary starting from start_x
-    arr_right = arr[:, start_x:, :]
-    _, top, right_rel, bottom = find_content_bounds(arr_right)
-    left  = start_x  # user already specified where cards start
-    right = start_x + right_rel
-
-    content_w = right - left
-    content_h = bottom - top
-    cell_w = content_w // cols
-    cell_h = content_h // rows
-
-    cards = []
-    for r in range(rows):
-        for c in range(cols):
-            x1 = left  + c * cell_w
-            y1 = top   + r * cell_h
-            x2 = x1 + cell_w
-            y2 = y1 + cell_h
-            cards.append((x1, y1, x2, y2))
-    return cards
-
-
 @app.route('/upload_strip', methods=['POST'])
 def upload_strip():
-    import json as _json
-    files    = request.files.getlist('strips')
-    # segments: [{y1, y2, cols, startX}]
-    segments_raw = request.form.get('segments')
-    if segments_raw:
-        segments = _json.loads(segments_raw)
-    else:
-        # legacy fallback
-        cols    = int(request.form.get('count', 5))
-        rows    = int(request.form.get('rows', 1))
-        start_x = int(request.form.get('start_x', 0))
-        segments = None
-
+    f = request.files.get('strip')
+    y_top = int(request.form.get('y_top', 0))
+    if not f: return jsonify({'error': 'No file'}), 400
+    
+    strip_id = uuid.uuid4().hex
+    img = Image.open(f).convert('RGBA')
     results = []
-    for f in files:
-        ext      = os.path.splitext(f.filename)[1]
-        strip_id = uuid.uuid4().hex
-        fname    = f'strip_{strip_id}{ext}'
-        path     = os.path.join(app.config['UPLOAD_FOLDER'], fname)
-        f.save(path)
-        img = Image.open(path)
-        iw, ih = img.size
-        arr = np.array(img)
-
-        if segments:
-            cards = []
-            for seg in segments:
-                y1      = int(seg['y1'])
-                y2      = min(int(seg['y2']), ih)
-                cols    = int(seg['cols'])
-                start_x = int(seg.get('startX', 0))
-                # find right boundary (first dark col from right)
-                arr_row = arr[y1:y2, start_x:, :]
-                col_mean = arr_row.mean(axis=0).mean(axis=1)
-                right_rel = next(
-                    (iw - start_x - 1 - i
-                     for i, v in enumerate(reversed(col_mean.tolist()))
-                     if v > 30),
-                    iw - start_x - 1
-                )
-                x_right = start_x + right_rel + 1
-                cw = (x_right - start_x) // cols
-                for c in range(cols):
-                    x1c = start_x + c * cw
-                    x2c = x1c + cw
-                    cards.append((x1c, y1, x2c, y2))
-        else:
-            cards = cut_grid(img, rows=rows, cols=cols, start_x=start_x)
-
-        for i, (x1, y1, x2, y2) in enumerate(cards):
-            piece = img.crop((x1, y1, x2, y2))
-            pname = f'piece_{strip_id}_{i}.png'
-            piece.save(os.path.join(app.config['UPLOAD_FOLDER'], pname))
-            results.append(pname)
-
+    for i, (x1, x2) in enumerate(BOXES_X):
+        piece = img.crop((x1, y_top, x2, y_top + FIXED_HEIGHT))
+        pname = f'p_{strip_id}_{i}.png'
+        piece.save(os.path.join(app.config['UPLOAD_FOLDER'], pname))
+        results.append(pname)
     return jsonify({'pieces': results})
 
-
-@app.route('/image/<filename>')
-def serve_image(filename):
-    return send_file(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-
-
+# ──────────────────────────────────────────────────
+#  核心：合併封面與格子的路由
+# ──────────────────────────────────────────────────
 @app.route('/generate', methods=['POST'])
 def generate():
-    data         = request.json
-    cover_file   = data.get('cover')
-    cells        = data.get('cells', [])
-    grid_rows    = int(data.get('grid_rows', 1))
-    grid_cols    = int(data.get('grid_cols', len(cells)))
-    output_width = 1200
-    images_to_compose = []
+    data = request.json
+    cover_name = data.get('cover')
+    cells = data.get('cells', [])
+    rows = int(data.get('grid_rows', 1))
+    cols = int(data.get('grid_cols', 5))
+    
+    # 1. 決定最終寬度 (以第一張造型卡片的寬度為準，通常約 243px * 5)
+    output_width = 1200 
+    cell_w = output_width // cols
+    cell_h = int(cell_w * (FIXED_HEIGHT / (BOXES_X[0][1] - BOXES_X[0][0])))
+    
+    images_to_combine = []
 
-    if cover_file:
-        cover_path = os.path.join(app.config['UPLOAD_FOLDER'], cover_file)
-        cover_img  = Image.open(cover_path).convert('RGBA')
-        ratio      = output_width / cover_img.width
-        cover_img  = cover_img.resize((output_width, int(cover_img.height * ratio)), Image.LANCZOS)
-        images_to_compose.append(cover_img)
+    # 2. 處理封面
+    if cover_name:
+        cover_path = os.path.join(app.config['UPLOAD_FOLDER'], cover_name)
+        if os.path.exists(cover_path):
+            cover_img = Image.open(cover_path).convert('RGBA')
+            # 封面縮放到跟輸出的總寬度一致
+            aspect = cover_img.height / cover_img.width
+            cover_img = cover_img.resize((output_width, int(output_width * aspect)), Image.LANCZOS)
+            images_to_combine.append(cover_img)
 
-    if cells and grid_cols > 0:
-        cell_w = output_width // grid_cols
-        sample_fname = next((c for c in cells if c), None)
-        if sample_fname:
-            sample = Image.open(os.path.join(app.config['UPLOAD_FOLDER'], sample_fname))
-            cell_h = int(sample.height * cell_w / sample.width)
-        else:
-            cell_h = cell_w
+    # 3. 繪製格子區
+    grid_h = rows * cell_h
+    grid_img = Image.new('RGBA', (output_width, grid_h), (26, 26, 26, 255)) # 深色背景
+    
+    for idx, fname in enumerate(cells):
+        if not fname: continue
+        r, c = divmod(idx, cols)
+        if r >= rows: break
+        
+        piece_path = os.path.join(app.config['UPLOAD_FOLDER'], fname)
+        if os.path.exists(piece_path):
+            p = Image.open(piece_path).convert('RGBA')
+            p = p.resize((cell_w, cell_h), Image.LANCZOS)
+            grid_img.paste(p, (c * cell_w, r * cell_h), p)
+    
+    images_to_combine.append(grid_img)
 
-        grid_img = Image.new('RGBA', (output_width, cell_h * grid_rows), (255, 255, 255, 255))
-        for idx, fname in enumerate(cells):
-            row = idx // grid_cols
-            col = idx  % grid_cols
-            if row >= grid_rows or not fname:
-                continue
-            piece = Image.open(os.path.join(app.config['UPLOAD_FOLDER'], fname)).convert('RGBA')
-            piece = piece.resize((cell_w, cell_h), Image.LANCZOS)
-            grid_img.paste(piece, (col * cell_w, row * cell_h))
-        images_to_compose.append(grid_img)
+    # 4. 垂直拼貼
+    total_h = sum(img.height for img in images_to_combine)
+    final = Image.new('RGBA', (output_width, total_h))
+    current_y = 0
+    for img in images_to_combine:
+        final.paste(img, (0, current_y), img)
+        current_y += img.height
 
-    if not images_to_compose:
-        return jsonify({'error': 'Nothing to compose'}), 400
-
-    total_h = sum(i.height for i in images_to_compose)
-    final   = Image.new('RGBA', (output_width, total_h), (255, 255, 255, 255))
-    y = 0
-    for img in images_to_compose:
-        final.paste(img, (0, y)); y += img.height
-
-    out_name = f'result_{uuid.uuid4().hex}.jpg'
-    final.convert('RGB').save(os.path.join(app.config['OUTPUT_FOLDER'], out_name), 'JPEG', quality=95)
-
-    buf = io.BytesIO()
-    preview = final.copy(); preview.thumbnail((800, 99999))
-    preview.convert('RGB').save(buf, 'JPEG', quality=85)
-
-    return jsonify({'preview': base64.b64encode(buf.getvalue()).decode(), 'filename': out_name})
-
-
-@app.route('/download/<filename>')
-def download(filename):
-    return send_file(os.path.join(app.config['OUTPUT_FOLDER'], filename),
-                     as_attachment=True, download_name=filename)
-
+    # 5. 回傳 Base64 預覽
+    out_io = io.BytesIO()
+    final.convert('RGB').save(out_io, 'JPEG', quality=90)
+    b64 = base64.b64encode(out_io.getvalue()).decode()
+    
+    return jsonify({'preview': b64})
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
