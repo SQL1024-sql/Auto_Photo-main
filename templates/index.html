@@ -2,186 +2,127 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>造型製圖工具 - 整合優化版</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>造型製圖工具</title>
 <style>
-[span_8](start_span)/* 基礎深色 UI 樣式[span_8](end_span) */
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: monospace; background: #1a1a1a; color: #e0e0e0; padding-bottom: 50px; }
-.panel { padding: 15px; border-bottom: 1px solid #2a2a2a; }
-.panel-title { color: #777; font-size: 12px; margin-bottom: 10px; }
-.row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
-button { background: #252525; color: #bbb; border: 1px solid #3a3a3a; padding: 8px 15px; cursor: pointer; border-radius: 4px; }
-button:hover { background: #333; color: #fff; }
-.ok { border-color: #2e7d32; color: #4caf50; }
-.blue-btn { border-color: #1976d2; color: #42a5f5; }
-
-[span_9](start_span)/* 畫布與 Bank[span_9](end_span) */
-canvas { border: 1px solid #333; display: block; touch-action: none; max-width: 100%; cursor: ns-resize; }
-.bank { display: flex; flex-wrap: wrap; gap: 8px; min-height: 100px; background: #111; padding: 10px; border: 1px solid #222; }
-.bank img { width: 65px; height: 107px; object-fit: cover; border: 1px solid #333; }
-.bank img.used { opacity: 0.3; filter: grayscale(1); }
-
-[span_10](start_span)/* 格子容器[span_10](end_span) */
-.grid-container { display: grid; gap: 8px; background: #111; padding: 15px; width: fit-content; border: 1px solid #333; }
-.cell { width: 100px; height: 165px; background: #222; border: 1px dashed #444; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.cell img { width: 100%; height: 100%; object-fit: fill; }
-
-#result-area { display: none; text-align: center; margin-top: 20px; }
-#result-img { max-width: 100%; border: 1px solid #444; }
+    * { box-sizing: border-box; }
+    body { font-family: monospace; background: #1a1a1a; color: #e0e0e0; padding: 10px; }
+    .panel { padding: 15px; border-bottom: 1px solid #333; margin-bottom: 10px; }
+    .row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    button { background: #333; color: #fff; border: 1px solid #555; padding: 10px 15px; cursor: pointer; border-radius: 4px; }
+    button.ok { border-color: #2e7d32; color: #4caf50; font-weight: bold; }
+    canvas { border: 1px solid #444; background: #000; max-width: 100%; display: block; margin: 10px 0; }
+    .bank { display: flex; flex-wrap: wrap; gap: 5px; min-height: 80px; background: #111; padding: 10px; border: 1px solid #222; }
+    .bank img { width: 60px; height: 100px; object-fit: cover; border: 1px solid #444; }
+    .bank img.used { opacity: 0.3; }
+    .grid-container { display: grid; gap: 5px; background: #111; padding: 10px; width: fit-content; }
+    .cell { width: 80px; height: 130px; background: #222; border: 1px dashed #444; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .cell img { width: 100%; height: 100%; object-fit: fill; }
+    #result-area { display: none; text-align: center; margin-top: 20px; }
+    #result-img { max-width: 100%; border: 2px solid #555; }
 </style>
 </head>
 <body>
 
 <div class="panel">
-  <div class="panel-title">1. COVER / 封面</div>
-  <div class="row">
+    <div>1. COVER 封面</div>
     <input type="file" id="cover-input">
-    <span id="cover-status">未上傳</span>
-  </div>
 </div>
 
 <div class="panel">
-  <div class="panel-title">2. STRIP / 造型切割 (請先選擇檔案)</div>
-  <div class="row">
-    <input type="file" id="strip-input" multiple>
-    <button id="btn-prev">PREV</button>
-    <span id="nav-info">0 / 0</span>
-    <button id="btn-next">NEXT</button>
-    <button class="ok" id="btn-cut">✂ 開始切割全部</button>
-  </div>
-  <div id="canvas-wrap" style="display:none;"><canvas id="c"></canvas></div>
+    <div>2. STRIP 造型切割</div>
+    <div class="row">
+        <input type="file" id="strip-input" multiple>
+        <button id="btn-cut" class="ok">✂ 開始切割全部</button>
+    </div>
+    <canvas id="c" style="display:none;"></canvas>
 </div>
 
 <div class="panel">
-  <div class="panel-title">3. GRID / 排版 (點擊造型可填入)</div>
-  <div id="bank" class="bank"></div>
-  <div class="row">
-    ROWS <input type="number" id="rows" value="2" style="width:40px">
-    COLS <input type="number" id="cols" value="5" style="width:40px">
-    <button id="btn-reset">重新建立</button>
-    <button class="blue-btn" id="btn-auto">⚡ 自動填充</button>
-    <button class="ok" id="btn-gen">✨ 生成長圖</button>
-  </div>
-  <div id="grid-wrap"></div>
+    <div>3. GRID 排版</div>
+    <div id="bank" class="bank"></div>
+    <div class="row">
+        ROWS <input type="number" id="rows" value="2" style="width:50px">
+        COLS <input type="number" id="cols" value="5" style="width:50px">
+        <button id="btn-reset">重新表格</button>
+        <button id="btn-gen" class="ok">✨ 生成長圖</button>
+    </div>
+    <div id="grid-wrap"></div>
 </div>
 
-<div class="panel" id="result-area">
-  <div class="panel-title">FINAL RESULT</div>
-  <img id="result-img">
+<div id="result-area">
+    <div>FINAL RESULT</div>
+    <img id="result-img">
 </div>
 
 <script>
-[span_11](start_span)// 初始化設定[span_11](end_span)
-const BOXES_X = [[510, 753], [767, 1009], [1025, 1265], [1281, 1524], [1538, 1781]];
+const BOX_X = [[510, 753], [767, 1009], [1025, 1265], [1281, 1524], [1538, 1781]];
 const FIXED_H = 437;
-let images = [], cur = 0, scale = 1, cells = [], allPieces = [], coverFile = null;
+let images = [], allPieces = [], cells = [], coverFile = null;
 
 const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
 
-// 錯誤追蹤機制
-window.onerror = (m, u, l) => alert(`發生錯誤: ${m}\n行號: ${l}`);
-
-[span_12](start_span)// 確保頁面載入後綁定按鈕[span_12](end_span)
 window.onload = () => {
     initGrid();
-    
-    // 綁定所有按鈕事件
-    document.getElementById('cover-input').onchange = e => uploadCover(e.target);
-    document.getElementById('strip-input').onchange = e => loadStrips(e.target);
-    document.getElementById('btn-prev').onclick = () => changeImg(-1);
-    document.getElementById('btn-next').onclick = () => changeImg(1);
+    document.getElementById('cover-input').onchange = uploadCover;
+    document.getElementById('strip-input').onchange = loadStrips;
     document.getElementById('btn-cut').onclick = cutAll;
     document.getElementById('btn-reset').onclick = initGrid;
-    document.getElementById('btn-auto').onclick = autoFill;
     document.getElementById('btn-gen').onclick = generate;
 };
 
-async function uploadCover(input) {
-    if(!input.files[0]) return;
-    const fd = new FormData(); fd.append('cover', input.files[0]);
+async function uploadCover(e) {
+    const fd = new FormData(); fd.append('cover', e.target.files[0]);
     const res = await fetch('/upload_cover', {method:'POST', body:fd});
     const data = await res.json();
     coverFile = data.filename;
-    document.getElementById('cover-status').innerText = "OK!";
 }
 
-function loadStrips(input) {
-    images = []; let loaded = 0;
-    Array.from(input.files).forEach((f, i) => {
+function loadStrips(e) {
+    images = Array.from(e.target.files).map(f => ({ f, y: 400 }));
+    canvas.style.display = 'block';
+    // 預覽第一張
+    const reader = new FileReader();
+    reader.onload = (ev) => {
         const img = new Image();
         img.onload = () => {
-            images[i] = { f, img, y: Math.round(img.height * 0.4) };
-            if(++loaded === input.files.length) {
-                document.getElementById('canvas-wrap').style.display='block';
-                showImg(0);
-            }
+            const sc = Math.min(window.innerWidth / img.width, 1);
+            canvas.width = img.width * sc; canvas.height = img.height * sc;
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         };
-        img.src = URL.createObjectURL(f);
-    });
-}
-
-function showImg(idx) {
-    cur = idx; const e = images[idx];
-    scale = Math.min((window.innerWidth-40)/e.img.width, 400/e.img.height, 1);
-    canvas.width = e.img.width * scale; canvas.height = e.img.height * scale;
-    document.getElementById('nav-info').innerText = `${idx+1} / ${images.length}`;
-    draw();
-}
-
-function draw() {
-    const e = images[cur], yt = e.y, yb = yt + FIXED_H;
-    ctx.drawImage(e.img, 0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(0, 0, canvas.width, yt*scale);
-    ctx.fillRect(0, yb*scale, canvas.width, canvas.height - yb*scale);
-    ctx.strokeStyle = '#00ff00'; ctx.lineWidth = 2;
-    BOXES_X.forEach(b => ctx.strokeRect(b[0]*scale, yt*scale, (b[1]-b[0])*scale, FIXED_H*scale));
-}
-
-[span_13](start_span)// 支援滑鼠與觸控的拖曳邏輯[span_13](end_span)
-const handleMove = (e) => {
-    e.preventDefault();
-    const rect = canvas.getBoundingClientRect();
-    const move = (m) => {
-        const clientY = m.touches ? m.touches[0].clientY : m.clientY;
-        let ny = (clientY - rect.top)/scale - (FIXED_H/2);
-        images[cur].y = Math.max(0, Math.min(ny, images[cur].img.height - FIXED_H));
-        draw();
+        img.src = ev.target.result;
     };
-    window.onmousemove = window.ontouchmove = move;
-    window.onmouseup = window.ontouchend = () => window.onmousemove = window.ontouchmove = null;
-};
-canvas.onmousedown = canvas.ontouchstart = handleMove;
+    reader.readAsDataURL(e.target.files[0]);
+}
 
 async function cutAll() {
     allPieces = [];
     const btn = document.getElementById('btn-cut');
     btn.innerText = "切割中...";
-    for(let e of images) {
-        const fd = new FormData(); 
-        fd.append('strip', e.f); 
-        fd.append('y_top', Math.round(e.y));
+    for(let imgObj of images) {
+        const fd = new FormData();
+        fd.append('strip', imgObj.f);
+        fd.append('y_top', imgObj.y);
         const res = await fetch('/upload_strip', {method:'POST', body:fd});
         const data = await res.json();
         allPieces.push(...data.pieces);
     }
-    btn.innerText = "✂ 開始切割全部";
+    btn.innerText = "✂ 切割完成";
     renderAll();
 }
 
 function initGrid() {
     const r = document.getElementById('rows').value, c = document.getElementById('cols').value;
     cells = new Array(r * c).fill(null);
-    const wrap = document.getElementById('grid-wrap');
-    wrap.innerHTML = `<div class="grid-container" style="grid-template-columns:repeat(${c}, 100px)"></div>`;
     renderAll();
 }
 
 function renderAll() {
-    const container = document.querySelector('.grid-container');
-    if(!container) return;
-    container.innerHTML = '';
+    const c = document.getElementById('cols').value;
+    const wrap = document.getElementById('grid-wrap');
+    wrap.innerHTML = `<div class="grid-container" style="grid-template-columns:repeat(${c}, 80px)"></div>`;
+    const container = wrap.firstChild;
+
     cells.forEach((fn, i) => {
         const div = document.createElement('div'); div.className = 'cell';
         div.innerHTML = fn ? `<img src="/image/${fn}">` : '';
@@ -201,16 +142,6 @@ function renderAll() {
     });
 }
 
-function autoFill() {
-    const used = cells.filter(c => c);
-    const avail = allPieces.filter(p => !used.includes(p));
-    let ai = 0;
-    for(let i=0; i<cells.length && ai < avail.length; i++) {
-        if(!cells[i]) cells[i] = avail[ai++];
-    }
-    renderAll();
-}
-
 async function generate() {
     const res = await fetch('/generate', {
         method: 'POST',
@@ -226,11 +157,8 @@ async function generate() {
     if(data.preview) {
         document.getElementById('result-area').style.display = 'block';
         document.getElementById('result-img').src = 'data:image/jpeg;base64,' + data.preview;
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
     }
 }
-
-function changeImg(s) { cur = (cur+s+images.length)%images.length; showImg(cur); }
 </script>
 </body>
 </html>
