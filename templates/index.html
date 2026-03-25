@@ -3,61 +3,32 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>造型製圖工具 - 行動優化版</title>
+<title>造型製圖工具 - 整合優化版</title>
 <style>
-/* ──────────────────────────────────────────────────
-   深色風格 UI (已針對手機優化)
-   ────────────────────────────────────────────────── */
+[span_8](start_span)/* 基礎深色 UI 樣式[span_8](end_span) */
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: monospace; background: #1a1a1a; color: #e0e0e0; font-size: 14px; padding-bottom: 50px; }
-.panel { padding: 14px 16px; border-bottom: 1px solid #2a2a2a; }
-.panel-title { color: #777; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
-.row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
-input[type=file], input[type=number] { color: #ccc; background: #222; border: 1px solid #3a3a3a; padding: 4px 8px; font-family: monospace; }
-
-/* 讓按鈕在手機上更大、更好點選 */
-button { 
-    background: #252525; color: #bbb; border: 1px solid #3a3a3a; 
-    padding: 10px 15px; cursor: pointer; transition: 0.2s; 
-    border-radius: 4px;
-}
+body { font-family: monospace; background: #1a1a1a; color: #e0e0e0; padding-bottom: 50px; }
+.panel { padding: 15px; border-bottom: 1px solid #2a2a2a; }
+.panel-title { color: #777; font-size: 12px; margin-bottom: 10px; }
+.row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+button { background: #252525; color: #bbb; border: 1px solid #3a3a3a; padding: 8px 15px; cursor: pointer; border-radius: 4px; }
 button:hover { background: #333; color: #fff; }
 .ok { border-color: #2e7d32; color: #4caf50; }
 .blue-btn { border-color: #1976d2; color: #42a5f5; }
 
-/* 畫布區域：增加 touch-action 避免手機拖曳時畫面跳動 */
-#canvas-wrap { position: relative; display: inline-block; margin-top: 10px; background: #000; width: 100%; text-align: center; }
-canvas { border: 1px solid #333; display: block; margin: 0 auto; cursor: ns-resize; touch-action: none; max-width: 100%; }
-
-/* 造型清單 (Bank) */
-.bank { display: flex; flex-wrap: wrap; gap: 8px; min-height: 100px; background: #111; padding: 10px; border: 1px solid #222; margin: 10px 0; }
-.bank img { width: 18vw; max-width: 70px; aspect-ratio: 1/1.65; object-fit: cover; cursor: grab; border: 1px solid #333; background: #222; }
+[span_9](start_span)/* 畫布與 Bank[span_9](end_span) */
+canvas { border: 1px solid #333; display: block; touch-action: none; max-width: 100%; cursor: ns-resize; }
+.bank { display: flex; flex-wrap: wrap; gap: 8px; min-height: 100px; background: #111; padding: 10px; border: 1px solid #222; }
+.bank img { width: 65px; height: 107px; object-fit: cover; border: 1px solid #333; }
 .bank img.used { opacity: 0.3; filter: grayscale(1); }
 
-/* 格子容器：手機版自動調整寬度 */
-.grid-container { display: grid; gap: 8px; background: #111; padding: 15px; width: 100%; max-width: 600px; margin: 0 auto; border: 1px solid #333; }
-.cell { 
-    width: 100%; 
-    aspect-ratio: 1/1.65; 
-    background: #222; 
-    border: 1px dashed #444; 
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
-    overflow: hidden; 
-    position: relative; 
-    cursor: pointer; 
-}
-.cell img { width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
-.cell.drag-over { border-color: #00ff00; background: #1b331b; }
+[span_10](start_span)/* 格子容器[span_10](end_span) */
+.grid-container { display: grid; gap: 8px; background: #111; padding: 15px; width: fit-content; border: 1px solid #333; }
+.cell { width: 100px; height: 165px; background: #222; border: 1px dashed #444; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.cell img { width: 100%; height: 100%; object-fit: fill; }
 
-#result-area { display: none; text-align: center; padding-top: 20px; }
-#result-img { max-width: 100%; border: 1px solid #444; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
-
-@media (max-width: 600px) {
-    .row { gap: 5px; }
-    button { flex: 1; font-size: 12px; padding: 8px 4px; }
-}
+#result-area { display: none; text-align: center; margin-top: 20px; }
+#result-img { max-width: 100%; border: 1px solid #444; }
 </style>
 </head>
 <body>
@@ -65,73 +36,90 @@ canvas { border: 1px solid #333; display: block; margin: 0 auto; cursor: ns-resi
 <div class="panel">
   <div class="panel-title">1. COVER / 封面</div>
   <div class="row">
-    <input type="file" onchange="uploadCover(this)">
-    <span id="cover-status" style="color:#666">未上傳</span>
+    <input type="file" id="cover-input">
+    <span id="cover-status">未上傳</span>
   </div>
 </div>
 
 <div class="panel">
-  <div class="panel-title">2. STRIP / 造型切割 (固定高度 437px)</div>
+  <div class="panel-title">2. STRIP / 造型切割 (請先選擇檔案)</div>
   <div class="row">
     <input type="file" id="strip-input" multiple>
-    <button onclick="changeImg(-1)">PREV</button>
-    <span id="nav-info" style="color:#aaa;">0 / 0</span>
-    <button onclick="changeImg(1)">NEXT</button>
-    <button class="ok" onclick="cutAll()">✂ 開始切割全部</button>
+    <button id="btn-prev">PREV</button>
+    <span id="nav-info">0 / 0</span>
+    <button id="btn-next">NEXT</button>
+    <button class="ok" id="btn-cut">✂ 開始切割全部</button>
   </div>
   <div id="canvas-wrap" style="display:none;"><canvas id="c"></canvas></div>
 </div>
 
 <div class="panel">
-  <div class="panel-title">3. GRID / 排版 (手機可直接點選造型填入)</div>
-  <div class="bank" id="bank"></div>
+  <div class="panel-title">3. GRID / 排版 (點擊造型可填入)</div>
+  <div id="bank" class="bank"></div>
   <div class="row">
     ROWS <input type="number" id="rows" value="2" style="width:40px">
     COLS <input type="number" id="cols" value="5" style="width:40px">
-    <button onclick="initGrid()">重新建立</button>
-    <button class="blue-btn" onclick="autoFill()">⚡ 自動填充</button>
-    <button class="ok" onclick="generate()">✨ 生成長圖</button>
+    <button id="btn-reset">重新建立</button>
+    <button class="blue-btn" id="btn-auto">⚡ 自動填充</button>
+    <button class="ok" id="btn-gen">✨ 生成長圖</button>
   </div>
-  <div id="grid-wrap" style="margin-top:10px;"></div>
+  <div id="grid-wrap"></div>
 </div>
 
 <div class="panel" id="result-area">
-  <div class="panel-title">FINAL RESULT (長按圖片儲存)</div>
+  <div class="panel-title">FINAL RESULT</div>
   <img id="result-img">
 </div>
 
 <script>
+[span_11](start_span)// 初始化設定[span_11](end_span)
 const BOXES_X = [[510, 753], [767, 1009], [1025, 1265], [1281, 1524], [1538, 1781]];
-const FIXED_H = 437; [span_3](start_span)// 包含「已擁有」區塊的高度[span_3](end_span)
+const FIXED_H = 437;
+let images = [], cur = 0, scale = 1, cells = [], allPieces = [], coverFile = null;
 
-let images = [], cur = 0, scale = 1, cells = [], allPieces = [], dragSrc = null, coverFile = null;
 const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
 
-// --- 封面上傳 ---
+// 錯誤追蹤機制
+window.onerror = (m, u, l) => alert(`發生錯誤: ${m}\n行號: ${l}`);
+
+[span_12](start_span)// 確保頁面載入後綁定按鈕[span_12](end_span)
+window.onload = () => {
+    initGrid();
+    
+    // 綁定所有按鈕事件
+    document.getElementById('cover-input').onchange = e => uploadCover(e.target);
+    document.getElementById('strip-input').onchange = e => loadStrips(e.target);
+    document.getElementById('btn-prev').onclick = () => changeImg(-1);
+    document.getElementById('btn-next').onclick = () => changeImg(1);
+    document.getElementById('btn-cut').onclick = cutAll;
+    document.getElementById('btn-reset').onclick = initGrid;
+    document.getElementById('btn-auto').onclick = autoFill;
+    document.getElementById('btn-gen').onclick = generate;
+};
+
 async function uploadCover(input) {
     if(!input.files[0]) return;
     const fd = new FormData(); fd.append('cover', input.files[0]);
     const res = await fetch('/upload_cover', {method:'POST', body:fd});
     const data = await res.json();
     coverFile = data.filename;
-    document.getElementById('cover-status').innerText = "OK: " + data.filename;
+    document.getElementById('cover-status').innerText = "OK!";
 }
 
-// --- 造型圖片載入 ---
-document.getElementById('strip-input').onchange = function(e) {
+function loadStrips(input) {
     images = []; let loaded = 0;
-    Array.from(e.target.files).forEach((f, i) => {
+    Array.from(input.files).forEach((f, i) => {
         const img = new Image();
         img.onload = () => {
             images[i] = { f, img, y: Math.round(img.height * 0.4) };
-            if(++loaded === e.target.files.length) {
+            if(++loaded === input.files.length) {
                 document.getElementById('canvas-wrap').style.display='block';
                 showImg(0);
             }
         };
         img.src = URL.createObjectURL(f);
     });
-};
+}
 
 function showImg(idx) {
     cur = idx; const e = images[idx];
@@ -151,8 +139,8 @@ function draw() {
     BOXES_X.forEach(b => ctx.strokeRect(b[0]*scale, yt*scale, (b[1]-b[0])*scale, FIXED_H*scale));
 }
 
-[span_4](start_span)// --- 核心修正：同時支援滑鼠與手機觸控拖曳[span_4](end_span) ---
-const startAdjust = (e) => {
+[span_13](start_span)// 支援滑鼠與觸控的拖曳邏輯[span_13](end_span)
+const handleMove = (e) => {
     e.preventDefault();
     const rect = canvas.getBoundingClientRect();
     const move = (m) => {
@@ -162,75 +150,52 @@ const startAdjust = (e) => {
         draw();
     };
     window.onmousemove = window.ontouchmove = move;
-    window.onmouseup = window.ontouchend = () => {
-        window.onmousemove = window.ontouchmove = null;
-    };
+    window.onmouseup = window.ontouchend = () => window.onmousemove = window.ontouchmove = null;
 };
-canvas.onmousedown = canvas.ontouchstart = startAdjust;
+canvas.onmousedown = canvas.ontouchstart = handleMove;
 
 async function cutAll() {
     allPieces = [];
+    const btn = document.getElementById('btn-cut');
+    btn.innerText = "切割中...";
     for(let e of images) {
-        const fd = new FormData(); fd.append('strip', e.f); fd.append('y_top', Math.round(e.y));
+        const fd = new FormData(); 
+        fd.append('strip', e.f); 
+        fd.append('y_top', Math.round(e.y));
         const res = await fetch('/upload_strip', {method:'POST', body:fd});
         const data = await res.json();
         allPieces.push(...data.pieces);
     }
+    btn.innerText = "✂ 開始切割全部";
     renderAll();
 }
 
-// --- 排版邏輯 (加入手機點選備案) ---
 function initGrid() {
     const r = document.getElementById('rows').value, c = document.getElementById('cols').value;
     cells = new Array(r * c).fill(null);
     const wrap = document.getElementById('grid-wrap');
-    wrap.innerHTML = `<div class="grid-container" style="grid-template-columns:repeat(${c}, 1fr)"></div>`;
+    wrap.innerHTML = `<div class="grid-container" style="grid-template-columns:repeat(${c}, 100px)"></div>`;
     renderAll();
 }
 
 function renderAll() {
-    const r = document.getElementById('rows').value, c = document.getElementById('cols').value;
     const container = document.querySelector('.grid-container');
     if(!container) return;
     container.innerHTML = '';
-
     cells.forEach((fn, i) => {
         const div = document.createElement('div'); div.className = 'cell';
         div.innerHTML = fn ? `<img src="/image/${fn}">` : '';
-        
-        // 電腦版拖曳
-        div.draggable = true;
-        div.ondragstart = e => { if(!cells[i]) return e.preventDefault(); dragSrc = {type:'cell', idx:i}; e.dataTransfer.setData('text', cells[i]); };
-        div.ondragover = e => { e.preventDefault(); div.classList.add('drag-over'); };
-        div.ondragleave = () => div.classList.remove('drag-over');
-        div.ondrop = e => {
-            e.preventDefault(); div.classList.remove('drag-over');
-            const data = e.dataTransfer.getData('text');
-            if(dragSrc.type === 'bank') cells[i] = data;
-            else { const old = dragSrc.idx; [cells[i], cells[old]] = [cells[old], cells[i]]; }
-            renderAll();
-        };
-
-        // 手機版/電腦版點選清除
         div.onclick = () => { cells[i] = null; renderAll(); };
         container.appendChild(div);
     });
 
     const bank = document.getElementById('bank'); bank.innerHTML = '';
     allPieces.forEach(fn => {
-        const img = document.createElement('img'); img.src = `/image/${fn}`; img.draggable = true;
+        const img = document.createElement('img'); img.src = `/image/${fn}`;
         if(cells.includes(fn)) img.classList.add('used');
-        
-        // 拖曳開始
-        img.ondragstart = e => { dragSrc = {type:'bank'}; e.dataTransfer.setData('text', fn); };
-        
-        // 手機版備案：點擊造型圖片直接填入第一個空格
         img.onclick = () => {
-            const emptyIdx = cells.indexOf(null);
-            if(emptyIdx !== -1 && !cells.includes(fn)) {
-                cells[emptyIdx] = fn;
-                renderAll();
-            }
+            const idx = cells.indexOf(null);
+            if(idx !== -1 && !cells.includes(fn)) { cells[idx] = fn; renderAll(); }
         };
         bank.appendChild(img);
     });
@@ -266,7 +231,6 @@ async function generate() {
 }
 
 function changeImg(s) { cur = (cur+s+images.length)%images.length; showImg(cur); }
-initGrid();
 </script>
 </body>
 </html>
