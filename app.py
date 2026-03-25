@@ -3,14 +3,13 @@ from PIL import Image
 import os, uuid, io, base64
 
 app = Flask(__name__)
-# 設定上傳暫存目錄
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# [span_4](start_span)定義遊戲截圖中的造型 X 軸座標區間[span_4](end_span)
+# 精確的裁切區域設定
 BOXES_X = [(512, 751), (770, 1009), (1028, 1265), (1285, 1524), (1543, 1781)]
-[span_5](start_span)FIXED_HEIGHT = 437  # 裁切的高度[span_5](end_span)
+FIXED_HEIGHT = 437 
 
 @app.route('/')
 def index():
@@ -38,7 +37,6 @@ def upload_strip():
     img = Image.open(f).convert('RGBA')
     results = []
     for i, (x1, x2) in enumerate(BOXES_X):
-        # [span_6](start_span)根據前端傳回的 Y 座標進行裁切[span_6](end_span)
         piece = img.crop((x1, y_top, x2, y_top + FIXED_HEIGHT))
         pname = f'p_{strip_id}_{i}.png'
         piece.save(os.path.join(app.config['UPLOAD_FOLDER'], pname))
@@ -59,7 +57,6 @@ def generate():
     
     images_to_combine = []
 
-    # 1. 處理封面
     if cover_name:
         cover_path = os.path.join(app.config['UPLOAD_FOLDER'], cover_name)
         if os.path.exists(cover_path):
@@ -68,7 +65,6 @@ def generate():
             cover_img = cover_img.resize((output_width, int(output_width * aspect)), Image.LANCZOS)
             images_to_combine.append(cover_img)
 
-    # 2. 繪製格子區
     grid_h = rows * cell_h
     grid_img = Image.new('RGBA', (output_width, grid_h), (26, 26, 26, 255))
     
@@ -76,7 +72,6 @@ def generate():
         if not fname: continue
         r, c = divmod(idx, cols)
         if r >= rows: break
-        
         piece_path = os.path.join(app.config['UPLOAD_FOLDER'], fname)
         if os.path.exists(piece_path):
             p = Image.open(piece_path).convert('RGBA')
@@ -85,21 +80,17 @@ def generate():
     
     images_to_combine.append(grid_img)
 
-    # 3. 垂直合併所有部分
     total_h = sum(img.height for img in images_to_combine)
     final = Image.new('RGBA', (output_width, total_h))
-    current_y = 0
+    curr_y = 0
     for img in images_to_combine:
-        final.paste(img, (0, current_y), img)
-        current_y += img.height
+        final.paste(img, (0, curr_y), img)
+        curr_y += img.height
 
-    # 4. 輸出 Base64 供前端顯示
     out_io = io.BytesIO()
     final.convert('RGB').save(out_io, 'JPEG', quality=90)
     b64 = base64.b64encode(out_io.getvalue()).decode()
-    
     return jsonify({'preview': b64})
 
 if __name__ == '__main__':
-    # Render 部署時會自動覆蓋此 Port 設定
     app.run(debug=True, port=5000)
