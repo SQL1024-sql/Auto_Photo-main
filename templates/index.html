@@ -2,64 +2,130 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<title>造型製圖工具 - 保留原版 + 手機裁切優化</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>造型製圖工具 - 行動優化版</title>
 <style>
+/* ──────────────────────────────────────────────────
+   深色風格 UI (已針對手機優化)
+   ────────────────────────────────────────────────── */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: monospace; background: #1a1a1a; color: #e0e0e0; font-size: 14px; padding-bottom: 50px; }
 .panel { padding: 14px 16px; border-bottom: 1px solid #2a2a2a; }
-.panel-title { color: #777; font-size: 11px; margin-bottom: 10px; }
-.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-button { background: #252525; color: #bbb; border: 1px solid #3a3a3a; padding: 6px 12px; cursor: pointer; }
+.panel-title { color: #777; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+.row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+input[type=file], input[type=number] { color: #ccc; background: #222; border: 1px solid #3a3a3a; padding: 4px 8px; font-family: monospace; }
 
-#canvas-wrap { position: relative; display: inline-block; margin-top: 10px; }
-canvas { border: 1px solid #333; display: block; cursor: ns-resize; touch-action: none; }
+/* 讓按鈕在手機上更大、更好點選 */
+button { 
+    background: #252525; color: #bbb; border: 1px solid #3a3a3a; 
+    padding: 10px 15px; cursor: pointer; transition: 0.2s; 
+    border-radius: 4px;
+}
+button:hover { background: #333; color: #fff; }
+.ok { border-color: #2e7d32; color: #4caf50; }
+.blue-btn { border-color: #1976d2; color: #42a5f5; }
 
+/* 畫布區域：增加 touch-action 避免手機拖曳時畫面跳動 */
+#canvas-wrap { position: relative; display: inline-block; margin-top: 10px; background: #000; width: 100%; text-align: center; }
+canvas { border: 1px solid #333; display: block; margin: 0 auto; cursor: ns-resize; touch-action: none; max-width: 100%; }
+
+/* 造型清單 (Bank) */
 .bank { display: flex; flex-wrap: wrap; gap: 8px; min-height: 100px; background: #111; padding: 10px; border: 1px solid #222; margin: 10px 0; }
-.bank img { width: 65px; height: 107px; object-fit: cover; cursor: grab; border: 1px solid #333; background: #222; }
+.bank img { width: 18vw; max-width: 70px; aspect-ratio: 1/1.65; object-fit: cover; cursor: grab; border: 1px solid #333; background: #222; }
 .bank img.used { opacity: 0.3; filter: grayscale(1); }
 
-.grid-container { display: grid; gap: 8px; background: #111; padding: 15px; width: fit-content; border: 1px solid #333; }
-.cell { width: 100px; height: 165px; background: #222; border: 1px dashed #444; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; cursor: pointer; }
+/* 格子容器：手機版自動調整寬度 */
+.grid-container { display: grid; gap: 8px; background: #111; padding: 15px; width: 100%; max-width: 600px; margin: 0 auto; border: 1px solid #333; }
+.cell { 
+    width: 100%; 
+    aspect-ratio: 1/1.65; 
+    background: #222; 
+    border: 1px dashed #444; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    overflow: hidden; 
+    position: relative; 
+    cursor: pointer; 
+}
 .cell img { width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
 .cell.drag-over { border-color: #00ff00; background: #1b331b; }
 
 #result-area { display: none; text-align: center; padding-top: 20px; }
-#result-img { max-width: 100%; border: 1px solid #444; }
+#result-img { max-width: 100%; border: 1px solid #444; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+
+@media (max-width: 600px) {
+    .row { gap: 5px; }
+    button { flex: 1; font-size: 12px; padding: 8px 4px; }
+}
 </style>
 </head>
 <body>
 
 <div class="panel">
-  <div class="panel-title">STRIP / 裁切（已支援手機）</div>
+  <div class="panel-title">1. COVER / 封面</div>
+  <div class="row">
+    <input type="file" onchange="uploadCover(this)">
+    <span id="cover-status" style="color:#666">未上傳</span>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-title">2. STRIP / 造型切割 (固定高度 437px)</div>
   <div class="row">
     <input type="file" id="strip-input" multiple>
     <button onclick="changeImg(-1)">PREV</button>
-    <span id="nav-info">0 / 0</span>
+    <span id="nav-info" style="color:#aaa;">0 / 0</span>
     <button onclick="changeImg(1)">NEXT</button>
+    <button class="ok" onclick="cutAll()">✂ 開始切割全部</button>
   </div>
-  <div id="canvas-wrap"><canvas id="c"></canvas></div>
+  <div id="canvas-wrap" style="display:none;"><canvas id="c"></canvas></div>
+</div>
+
+<div class="panel">
+  <div class="panel-title">3. GRID / 排版 (手機可直接點選造型填入)</div>
+  <div class="bank" id="bank"></div>
+  <div class="row">
+    ROWS <input type="number" id="rows" value="2" style="width:40px">
+    COLS <input type="number" id="cols" value="5" style="width:40px">
+    <button onclick="initGrid()">重新建立</button>
+    <button class="blue-btn" onclick="autoFill()">⚡ 自動填充</button>
+    <button class="ok" onclick="generate()">✨ 生成長圖</button>
+  </div>
+  <div id="grid-wrap" style="margin-top:10px;"></div>
+</div>
+
+<div class="panel" id="result-area">
+  <div class="panel-title">FINAL RESULT (長按圖片儲存)</div>
+  <img id="result-img">
 </div>
 
 <script>
-const BOXES_X = [[510,753],[767,1009],[1025,1265],[1281,1524],[1538,1781]];
-const FIXED_H = 437;
+const BOXES_X = [[510, 753], [767, 1009], [1025, 1265], [1281, 1524], [1538, 1781]];
+const FIXED_H = 437; [span_3](start_span)// 包含「已擁有」區塊的高度[span_3](end_span)
 
-let images = [], cur = 0, scale = 1;
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
+let images = [], cur = 0, scale = 1, cells = [], allPieces = [], dragSrc = null, coverFile = null;
+const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
 
-// ⭐ 多張載入（保留原邏輯但修好）
+// --- 封面上傳 ---
+async function uploadCover(input) {
+    if(!input.files[0]) return;
+    const fd = new FormData(); fd.append('cover', input.files[0]);
+    const res = await fetch('/upload_cover', {method:'POST', body:fd});
+    const data = await res.json();
+    coverFile = data.filename;
+    document.getElementById('cover-status').innerText = "OK: " + data.filename;
+}
+
+// --- 造型圖片載入 ---
 document.getElementById('strip-input').onchange = function(e) {
-    images = [];
-    let loaded = 0;
-    const files = Array.from(e.target.files);
-
-    files.forEach((f, i) => {
+    images = []; let loaded = 0;
+    Array.from(e.target.files).forEach((f, i) => {
         const img = new Image();
         img.onload = () => {
             images[i] = { f, img, y: Math.round(img.height * 0.4) };
-            loaded++;
-            if (loaded === files.length) {
+            if(++loaded === e.target.files.length) {
+                document.getElementById('canvas-wrap').style.display='block';
                 showImg(0);
             }
         };
@@ -68,78 +134,139 @@ document.getElementById('strip-input').onchange = function(e) {
 };
 
 function showImg(idx) {
-    cur = idx;
-    const e = images[idx];
-    scale = Math.min((window.innerWidth-50)/e.img.width, 400/e.img.height, 1);
-    canvas.width = e.img.width * scale;
-    canvas.height = e.img.height * scale;
+    cur = idx; const e = images[idx];
+    scale = Math.min((window.innerWidth-40)/e.img.width, 400/e.img.height, 1);
+    canvas.width = e.img.width * scale; canvas.height = e.img.height * scale;
     document.getElementById('nav-info').innerText = `${idx+1} / ${images.length}`;
     draw();
 }
 
 function draw() {
-    const e = images[cur];
-    const yt = e.y;
-    const yb = yt + FIXED_H;
-
+    const e = images[cur], yt = e.y, yb = yt + FIXED_H;
     ctx.drawImage(e.img, 0, 0, canvas.width, canvas.height);
-
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, canvas.width, yt*scale);
     ctx.fillRect(0, yb*scale, canvas.width, canvas.height - yb*scale);
-
-    ctx.strokeStyle = '#00ff00';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#00ff00'; ctx.lineWidth = 2;
     BOXES_X.forEach(b => ctx.strokeRect(b[0]*scale, yt*scale, (b[1]-b[0])*scale, FIXED_H*scale));
 }
 
-// ⭐ 核心優化：同時支援滑鼠 + 手機
-function updateY(clientY) {
+[span_4](start_span)// --- 核心修正：同時支援滑鼠與手機觸控拖曳[span_4](end_span) ---
+const startAdjust = (e) => {
+    e.preventDefault();
     const rect = canvas.getBoundingClientRect();
-    let ny = (clientY - rect.top)/scale - (FIXED_H/2);
-    images[cur].y = Math.max(0, Math.min(ny, images[cur].img.height - FIXED_H));
-    draw();
+    const move = (m) => {
+        const clientY = m.touches ? m.touches[0].clientY : m.clientY;
+        let ny = (clientY - rect.top)/scale - (FIXED_H/2);
+        images[cur].y = Math.max(0, Math.min(ny, images[cur].img.height - FIXED_H));
+        draw();
+    };
+    window.onmousemove = window.ontouchmove = move;
+    window.onmouseup = window.ontouchend = () => {
+        window.onmousemove = window.ontouchmove = null;
+    };
+};
+canvas.onmousedown = canvas.ontouchstart = startAdjust;
+
+async function cutAll() {
+    allPieces = [];
+    for(let e of images) {
+        const fd = new FormData(); fd.append('strip', e.f); fd.append('y_top', Math.round(e.y));
+        const res = await fetch('/upload_strip', {method:'POST', body:fd});
+        const data = await res.json();
+        allPieces.push(...data.pieces);
+    }
+    renderAll();
 }
 
-// 拖曳調整裁切高度（滑鼠 + 觸控）
-function setYFromClientY(clientY, rect) {
-    let ny = (clientY - rect.top)/scale - (FIXED_H/2);
-    images[cur].y = Math.max(0, Math.min(ny, images[cur].img.height - FIXED_H));
-    draw();
+// --- 排版邏輯 (加入手機點選備案) ---
+function initGrid() {
+    const r = document.getElementById('rows').value, c = document.getElementById('cols').value;
+    cells = new Array(r * c).fill(null);
+    const wrap = document.getElementById('grid-wrap');
+    wrap.innerHTML = `<div class="grid-container" style="grid-template-columns:repeat(${c}, 1fr)"></div>`;
+    renderAll();
 }
 
-// 滑鼠
-canvas.onmousedown = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const move = (m) => setYFromClientY(m.clientY, rect);
-    move(e);
-    window.onmousemove = move;
-    window.onmouseup = () => window.onmousemove = null;
-};
+function renderAll() {
+    const r = document.getElementById('rows').value, c = document.getElementById('cols').value;
+    const container = document.querySelector('.grid-container');
+    if(!container) return;
+    container.innerHTML = '';
 
-// 觸控（手機）
-canvas.ontouchstart = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const move = (t) => setYFromClientY(t.touches[0].clientY, rect);
-    move(e);
-    window.ontouchmove = move;
-    window.ontouchend = () => window.ontouchmove = null;
-};
+    cells.forEach((fn, i) => {
+        const div = document.createElement('div'); div.className = 'cell';
+        div.innerHTML = fn ? `<img src="/image/${fn}">` : '';
+        
+        // 電腦版拖曳
+        div.draggable = true;
+        div.ondragstart = e => { if(!cells[i]) return e.preventDefault(); dragSrc = {type:'cell', idx:i}; e.dataTransfer.setData('text', cells[i]); };
+        div.ondragover = e => { e.preventDefault(); div.classList.add('drag-over'); };
+        div.ondragleave = () => div.classList.remove('drag-over');
+        div.ondrop = e => {
+            e.preventDefault(); div.classList.remove('drag-over');
+            const data = e.dataTransfer.getData('text');
+            if(dragSrc.type === 'bank') cells[i] = data;
+            else { const old = dragSrc.idx; [cells[i], cells[old]] = [cells[old], cells[i]]; }
+            renderAll();
+        };
 
-canvas.ontouchstart = (e) => {
-    updateY(e.touches[0].clientY);
-};
+        // 手機版/電腦版點選清除
+        div.onclick = () => { cells[i] = null; renderAll(); };
+        container.appendChild(div);
+    });
 
-canvas.ontouchmove = (e) => {
-    updateY(e.touches[0].clientY);
-};
-
-function changeImg(step) {
-    if(images.length===0) return;
-    cur = (cur + step + images.length) % images.length;
-    showImg(cur);
+    const bank = document.getElementById('bank'); bank.innerHTML = '';
+    allPieces.forEach(fn => {
+        const img = document.createElement('img'); img.src = `/image/${fn}`; img.draggable = true;
+        if(cells.includes(fn)) img.classList.add('used');
+        
+        // 拖曳開始
+        img.ondragstart = e => { dragSrc = {type:'bank'}; e.dataTransfer.setData('text', fn); };
+        
+        // 手機版備案：點擊造型圖片直接填入第一個空格
+        img.onclick = () => {
+            const emptyIdx = cells.indexOf(null);
+            if(emptyIdx !== -1 && !cells.includes(fn)) {
+                cells[emptyIdx] = fn;
+                renderAll();
+            }
+        };
+        bank.appendChild(img);
+    });
 }
+
+function autoFill() {
+    const used = cells.filter(c => c);
+    const avail = allPieces.filter(p => !used.includes(p));
+    let ai = 0;
+    for(let i=0; i<cells.length && ai < avail.length; i++) {
+        if(!cells[i]) cells[i] = avail[ai++];
+    }
+    renderAll();
+}
+
+async function generate() {
+    const res = await fetch('/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            cover: coverFile,
+            cells: cells,
+            grid_rows: document.getElementById('rows').value,
+            grid_cols: document.getElementById('cols').value
+        })
+    });
+    const data = await res.json();
+    if(data.preview) {
+        document.getElementById('result-area').style.display = 'block';
+        document.getElementById('result-img').src = 'data:image/jpeg;base64,' + data.preview;
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }
+}
+
+function changeImg(s) { cur = (cur+s+images.length)%images.length; showImg(cur); }
+initGrid();
 </script>
-
 </body>
 </html>
