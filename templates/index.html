@@ -2,13 +2,13 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<title>造型製圖工具 - 完整強化版</title>
+<title>造型製圖工具 - 完整版</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:monospace;background:#1a1a1a;color:#e0e0e0;padding-bottom:50px}
 .panel{padding:14px;border-bottom:1px solid #2a2a2a}
-.row{display:flex;gap:10px;flex-wrap:wrap}
-button{background:#252525;color:#bbb;border:1px solid #3a3a3a;padding:6px 12px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button{background:#252525;color:#bbb;border:1px solid #3a3a3a;padding:6px 12px;cursor:pointer}
 canvas{border:1px solid #333;touch-action:none}
 .bank{display:flex;flex-wrap:wrap;gap:8px;padding:10px}
 .bank img{width:65px;height:107px;border:1px solid #333}
@@ -21,10 +21,15 @@ canvas{border:1px solid #333;touch-action:none}
 <body>
 
 <div class="panel">
+<div class="row">
 <input type="file" id="cover-input">
 <input type="file" id="strip-input" multiple>
+<button onclick="changeImg(-1)">PREV</button>
+<span id="nav">0 / 0</span>
+<button onclick="changeImg(1)">NEXT</button>
 <button onclick="cutAll()">切割</button>
 <button onclick="autoFill()">AUTO FILL</button>
+</div>
 <canvas id="c"></canvas>
 </div>
 
@@ -53,24 +58,37 @@ document.getElementById('cover-input').onchange=e=>{
  .then(r=>r.json()).then(d=>coverFile=d.filename);
 };
 
-// load strips
-document.getElementById('strip-input').onchange=e=>{
+// 多張圖片載入（修正版）
+document.getElementById('strip-input').onchange=function(e){
  images=[];
- Array.from(e.target.files).forEach((f,i)=>{
+ let loaded=0;
+ const files=Array.from(e.target.files);
+
+ files.forEach((f,i)=>{
   const img=new Image();
   img.onload=()=>{
    images[i]={f,img,y:img.height*0.4};
-   if(i===0)showImg(0);
+   loaded++;
+   if(loaded===files.length){
+    showImg(0);
+   }
   };
   img.src=URL.createObjectURL(f);
  });
 };
+
+function changeImg(step){
+ if(images.length===0)return;
+ cur=(cur+step+images.length)%images.length;
+ showImg(cur);
+}
 
 function showImg(i){
  cur=i;
  const e=images[i];
  canvas.width=e.img.width*scale;
  canvas.height=e.img.height*scale;
+ document.getElementById('nav').innerText=`${i+1} / ${images.length}`;
  draw();
 }
 
@@ -139,7 +157,6 @@ function initGrid(){
    renderGrid();renderBank();
   };
 
-  // 手機拖曳（長按）
   let timer;
   div.ontouchstart=()=>{
    timer=setTimeout(()=>{selectedPiece=cells[i];cells[i]=null;renderGrid();},300);
