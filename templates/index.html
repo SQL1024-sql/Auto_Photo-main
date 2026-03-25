@@ -2,7 +2,8 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<title>造型製圖工具 - 行動優化版</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>造型製圖工具 - 最終修復版</title>
 <style>
 /* ──────────────────────────────────────────────────
    深色風格 UI
@@ -13,13 +14,13 @@ body { font-family: monospace; background: #1a1a1a; color: #e0e0e0; font-size: 1
 .panel-title { color: #777; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
 .row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
 input[type=file], input[type=number] { color: #ccc; background: #222; border: 1px solid #3a3a3a; padding: 4px 8px; font-family: monospace; }
-button { background: #252525; color: #bbb; border: 1px solid #3a3a3a; padding: 6px 12px; cursor: pointer; transition: 0.2s; }
+button { background: #252525; color: #bbb; border: 1px solid #3a3a3a; padding: 6px 12px; cursor: pointer; transition: 0.2s; border-radius: 4px; }
 button:hover { background: #333; color: #fff; }
 .ok { border-color: #2e7d32; color: #4caf50; }
 .blue-btn { border-color: #1976d2; color: #42a5f5; }
 
 /* 畫布區域 */
-#canvas-wrap { position: relative; display: inline-block; margin-top: 10px; background: #000; width: 100%; overflow: hidden; }
+#canvas-wrap { position: relative; display: inline-block; margin-top: 10px; background: #000; width: 100%; max-width: 100%; overflow: hidden; }
 canvas { border: 1px solid #333; display: block; cursor: ns-resize; max-width: 100%; height: auto; touch-action: none; }
 
 /* 造型清單 (Bank) */
@@ -27,7 +28,7 @@ canvas { border: 1px solid #333; display: block; cursor: ns-resize; max-width: 1
 .bank img { width: 65px; height: 107px; object-fit: cover; cursor: grab; border: 1px solid #333; background: #222; }
 .bank img.used { opacity: 0.3; filter: grayscale(1); }
 
-/* 格子容器 - 1:1.65 比例 */
+/* 格子容器 */
 .grid-container { display: grid; gap: 8px; background: #111; padding: 15px; width: fit-content; border: 1px solid #333; }
 .cell { 
     width: 100px; 
@@ -65,6 +66,9 @@ canvas { border: 1px solid #333; display: block; cursor: ns-resize; max-width: 1
     <button onclick="changeImg(-1)">PREV</button>
     <span id="nav-info" style="color:#aaa;">0 / 0</span>
     <button onclick="changeImg(1)">NEXT</button>
+    <div style="border-left: 1px solid #444; height: 20px; margin: 0 5px;"></div>
+    <button onclick="fineTune(-5)">↑ 微調</button>
+    <button onclick="fineTune(5)">↓ 微調</button>
     <button class="ok" onclick="cutAll()">✂ 開始切割全部</button>
   </div>
   <div id="canvas-wrap" style="display:none;"><canvas id="c"></canvas></div>
@@ -96,7 +100,7 @@ let images = [], cur = 0, scale = 1, cells = [], allPieces = [], dragSrc = null,
 
 const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
 
-// --- 封面與圖片上傳 ---
+// --- 上傳邏輯 ---
 async function uploadCover(input) {
     if(!input.files[0]) return;
     const fd = new FormData(); fd.append('cover', input.files[0]);
@@ -131,6 +135,7 @@ function showImg(idx) {
 
 function draw() {
     const e = images[cur], yt = e.y, yb = yt + FIXED_H;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(e.img, 0, 0, canvas.width, canvas.height);
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, canvas.width, yt*scale);
@@ -139,26 +144,34 @@ function draw() {
     BOXES_X.forEach(b => ctx.strokeRect(b[0]*scale, yt*scale, (b[1]-b[0])*scale, FIXED_H*scale));
 }
 
-// --- 裁切座標更新 (相容 Mouse & Touch) ---
+// --- 手機與電腦共用的精確位移邏輯 ---
 function updateY(clientY) {
     const rect = canvas.getBoundingClientRect();
     const e = images[cur];
-    // 使用 clientY 減去 rect.top 取得畫布內相對座標，再除以縮放比例
-    let ny = (clientY - rect.top) / scale - (FIXED_H / 2);
+    
+    // 計算相對於 Canvas 實際顯示區域的 Y 比例
+    const clickYInCanvas = (clientY - rect.top) * (canvas.height / rect.height);
+    let ny = (clickYInCanvas / scale) - (FIXED_H / 2);
+    
     images[cur].y = Math.max(0, Math.min(ny, e.img.height - FIXED_H));
     draw();
 }
 
-// 滑鼠操作
+function fineTune(delta) {
+    const e = images[cur];
+    images[cur].y = Math.max(0, Math.min(e.y + delta, e.img.height - FIXED_H));
+    draw();
+}
+
+// 事件綁定
 canvas.onmousedown = (e) => {
     updateY(e.clientY);
     window.onmousemove = (m) => updateY(m.clientY);
     window.onmouseup = () => window.onmousemove = null;
 };
 
-// 手機觸控操作
 canvas.addEventListener('touchstart', (e) => {
-    e.preventDefault(); // 避免觸發捲動
+    e.preventDefault();
     updateY(e.touches[0].clientY);
 }, { passive: false });
 
@@ -167,6 +180,7 @@ canvas.addEventListener('touchmove', (e) => {
     updateY(e.touches[0].clientY);
 }, { passive: false });
 
+// --- 切割與排版 ---
 async function cutAll() {
     allPieces = [];
     for(let e of images) {
@@ -178,7 +192,6 @@ async function cutAll() {
     renderAll();
 }
 
-// --- 排版與拖曳邏輯 ---
 function initGrid() {
     const r = document.getElementById('rows').value, c = document.getElementById('cols').value;
     cells = new Array(r * c).fill(null);
