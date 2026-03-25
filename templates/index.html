@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<title>造型製圖工具 - 最終整合版</title>
+<title>造型製圖工具 - 行動優化版</title>
 <style>
 /* ──────────────────────────────────────────────────
    深色風格 UI
@@ -19,15 +19,15 @@ button:hover { background: #333; color: #fff; }
 .blue-btn { border-color: #1976d2; color: #42a5f5; }
 
 /* 畫布區域 */
-#canvas-wrap { position: relative; display: inline-block; margin-top: 10px; background: #000; }
-canvas { border: 1px solid #333; display: block; cursor: ns-resize; }
+#canvas-wrap { position: relative; display: inline-block; margin-top: 10px; background: #000; width: 100%; overflow: hidden; }
+canvas { border: 1px solid #333; display: block; cursor: ns-resize; max-width: 100%; height: auto; touch-action: none; }
 
 /* 造型清單 (Bank) */
 .bank { display: flex; flex-wrap: wrap; gap: 8px; min-height: 100px; background: #111; padding: 10px; border: 1px solid #222; margin: 10px 0; }
 .bank img { width: 65px; height: 107px; object-fit: cover; cursor: grab; border: 1px solid #333; background: #222; }
 .bank img.used { opacity: 0.3; filter: grayscale(1); }
 
-/* 格子容器 - 修正為 1:1.65 比例以完整顯示 540px 高度的卡片 */
+/* 格子容器 - 1:1.65 比例 */
 .grid-container { display: grid; gap: 8px; background: #111; padding: 15px; width: fit-content; border: 1px solid #333; }
 .cell { 
     width: 100px; 
@@ -89,9 +89,8 @@ canvas { border: 1px solid #333; display: block; cursor: ns-resize; }
 </div>
 
 <script>
-// 使用你提供的精確 X 座標
 const BOXES_X = [[510, 753], [767, 1009], [1025, 1265], [1281, 1524], [1538, 1781]];
-const FIXED_H = 437; // 核心修正：固定高度為 437px 以包含「已擁有」區塊
+const FIXED_H = 437; 
 
 let images = [], cur = 0, scale = 1, cells = [], allPieces = [], dragSrc = null, coverFile = null;
 
@@ -112,7 +111,6 @@ document.getElementById('strip-input').onchange = function(e) {
     Array.from(e.target.files).forEach((f, i) => {
         const img = new Image();
         img.onload = () => {
-            // 預設裁切位置在圖片中間偏上
             images[i] = { f, img, y: Math.round(img.height * 0.4) };
             if(++loaded === e.target.files.length) {
                 document.getElementById('canvas-wrap').style.display='block';
@@ -141,16 +139,33 @@ function draw() {
     BOXES_X.forEach(b => ctx.strokeRect(b[0]*scale, yt*scale, (b[1]-b[0])*scale, FIXED_H*scale));
 }
 
-// 拖曳調整裁切高度
-canvas.onmousedown = (e) => {
+// --- 裁切座標更新 (相容 Mouse & Touch) ---
+function updateY(clientY) {
     const rect = canvas.getBoundingClientRect();
-    const move = (m) => {
-        let ny = (m.clientY - rect.top)/scale - (FIXED_H/2);
-        images[cur].y = Math.max(0, Math.min(ny, images[cur].img.height - FIXED_H));
-        draw();
-    };
-    move(e); window.onmousemove = move; window.onmouseup = () => window.onmousemove = null;
+    const e = images[cur];
+    // 使用 clientY 減去 rect.top 取得畫布內相對座標，再除以縮放比例
+    let ny = (clientY - rect.top) / scale - (FIXED_H / 2);
+    images[cur].y = Math.max(0, Math.min(ny, e.img.height - FIXED_H));
+    draw();
+}
+
+// 滑鼠操作
+canvas.onmousedown = (e) => {
+    updateY(e.clientY);
+    window.onmousemove = (m) => updateY(m.clientY);
+    window.onmouseup = () => window.onmousemove = null;
 };
+
+// 手機觸控操作
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault(); // 避免觸發捲動
+    updateY(e.touches[0].clientY);
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    updateY(e.touches[0].clientY);
+}, { passive: false });
 
 async function cutAll() {
     allPieces = [];
