@@ -2,4 +2,4 @@ Flask
 Pillow
 gunicorn
 Werkzeug
-cv2
+opencv-python
