@@ -8,8 +8,8 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # 你提供的精確 X 座標與高度
-BOXES_X = [(512, 751), (770, 1009), (1028, 1265), (1285, 1524), (1543, 1781)]
-FIXED_HEIGHT = 437  # 包含「已擁有」區塊的高度
+BOXES_X = [[661, 963], [988, 1290], [1315, 1618], [1644, 1946], [1973, 2274]]
+FIXED_HEIGHT = 552  # 包含「已擁有」區塊的高度
 
 @app.route('/')
 def index():
