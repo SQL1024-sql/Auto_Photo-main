@@ -6,63 +6,81 @@ import cv2
 
 app = Flask(__name__)
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
-# 新增一個存放過濾標籤圖片的資料夾
 TAGS_FOLDER = os.path.join(os.path.dirname(__file__), 'filter_tags')
+SORT_TAGS_FOLDER = os.path.join(os.path.dirname(__file__), 'sort_tags')
 
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(TAGS_FOLDER, exist_ok=True)
+# 確保所有必要資料夾都存在
+for folder in [UPLOAD_FOLDER, TAGS_FOLDER, SORT_TAGS_FOLDER]:
+    os.makedirs(folder, exist_ok=True)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['TAGS_FOLDER'] = TAGS_FOLDER
+app.config['SORT_TAGS_FOLDER'] = SORT_TAGS_FOLDER
 
-# 精確 X 座標與高度
+# 定義裁切座標與高度
 BOXES_X = [[661, 963], [988, 1290], [1315, 1618], [1644, 1946], [1973, 2274]]
-FIXED_HEIGHT = 552 
+FIXED_HEIGHT = 552
 
-def should_filter_piece(image_piece):
-    """
-    掃描 filter_tags 資料夾內的所有圖片。
-    只要其中任一標籤比對成功（相似度 > 0.8），就回傳 True 以過濾該圖。
-    """
-    tag_files = [f for f in os.listdir(app.config['TAGS_FOLDER']) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
-    if not tag_files:
-        return False
-
+def cv_imread_unicode(file_path):
+    """支援中文路徑與檔名的 OpenCV 讀取方式"""
     try:
-        # 1. 將 PIL 轉換為 OpenCV 格式 (BGR)
-        target_bgr = cv2.cvtColor(np.array(image_piece.convert('RGB')), cv2.COLOR_RGB2BGR)
-        
-        # 2. 鎖定標籤最常出現的區域 (右上角)，縮小範圍可以提高準確率並節省效能
-        # 區域設定：y軸 0~120 像素，x軸從中間到最後
-        h, w = target_bgr.shape[:2]
-        roi = target_bgr[0:130, int(w*0.4):w]
-
-        for tag_name in tag_files:
-            tag_path = os.path.join(app.config['TAGS_FOLDER'], tag_name)
-            template = cv2.imread(tag_path)
-            if template is None: continue
-
-            # 如果標籤範本比 ROI 還大，則跳過
-            if template.shape[0] > roi.shape[0] or template.shape[1] > roi.shape[1]:
-                continue
-
-            # 3. 執行範本比對
-            res = cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED)
-            _, max_val, _, _ = cv2.minMaxLoc(res)
-
-            # 4. 門檻值設定為 0.8 (可視情況微調)
-            if max_val > 0.9:
-                print(f"自動過濾：偵測到標籤 [{tag_name}]，相似度：{max_val:.2f}")
-                return True
-                
-        return False
+        # 先用 numpy 讀取成 binary 流，再交給 OpenCV 解碼
+        return cv2.imdecode(np.fromfile(file_path, dtype=np.uint8), cv2.IMREAD_COLOR)
     except Exception as e:
-        print(f"標籤比對出錯: {e}")
-        return False
+        print(f"讀取圖檔失敗 ({file_path}): {e}")
+        return None
+
+def get_matching_info(image_piece):
+    """
+    掃描資料夾，同時進行過濾檢查與權重計算
+    回傳: (是否應過濾, 權重分數)
+    """
+    # 轉換 PIL 為 OpenCV 格式
+    target_bgr = cv2.cvtColor(np.array(image_piece.convert('RGB')), cv2.COLOR_RGB2BGR)
+    h, w = target_bgr.shape[:2]
+    # 鎖定標籤常出現的右上角 ROI 區域 (y:0-130, x:40%寬度到最後)
+    roi = target_bgr[0:130, int(w*0.4):w]
+
+    # 1. 檢查是否需要過濾 (filter_tags)
+    filter_files = [f for f in os.listdir(app.config['TAGS_FOLDER']) 
+                    if f.lower().endswith(('.png', '.jpg', '.jpeg')) and not f.startswith('.')]
+    
+    for tag_name in filter_files:
+        template = cv_imread_unicode(os.path.join(app.config['TAGS_FOLDER'], tag_name))
+        if template is None: continue
+        if template.shape[0] > roi.shape[0] or template.shape[1] > roi.shape[1]: continue
+
+        res = cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, _ = cv2.minMaxLoc(res)
+        if max_val > 0.9: # 門檻值微調至 0.85 提高穩定性
+            print(f"命中過濾標籤: {tag_name} ({max_val:.2f})")
+            return True, 0
+
+    # 2. 計算權重分數 (sort_tags)
+    max_weight = 0
+    sort_files = [f for f in os.listdir(app.config['SORT_TAGS_FOLDER']) 
+                  if f.lower().endswith(('.png', '.jpg', '.jpeg')) and not f.startswith('.')]
+    
+    for sf in sort_files:
+        template = cv_imread_unicode(os.path.join(app.config['SORT_TAGS_FOLDER'], sf))
+        if template is None: continue
+        if template.shape[0] > roi.shape[0] or template.shape[1] > roi.shape[1]: continue
+
+        res = cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, _ = cv2.minMaxLoc(res)
+        
+        if max_val > 0.8:
+            try:
+                # 解析檔名 "tag_090.png" 取得 90
+                weight = int(sf.split('_')[-1].split('.')[0])
+                max_weight = max(max_weight, weight)
+            except: pass
+
+    return False, max_weight
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index-2622.html')
 
 @app.route('/image/<filename>')
 def serve_image(filename):
@@ -87,16 +105,13 @@ def upload_strip():
     results = []
     
     for i, (x1, x2) in enumerate(BOXES_X):
-        # 裁切小圖
         piece = img.crop((x1, y_top, x2, y_top + FIXED_HEIGHT))
         
-        # ──────────────────────────────────────────────────
-        # 核心功能：檢查是否含有要過濾的標籤
-        # ──────────────────────────────────────────────────
-        if should_filter_piece(piece):
-            continue # 如果偵測到標籤，直接跳過不儲存
+        is_filter, weight = get_matching_info(piece)
+        if is_filter: continue
             
-        pname = f'p_{strip_id}_{i}.png'
+        # 檔名加入權重前綴，方便前端排序 (例如: w090_stripid_0.png)
+        pname = f'w{weight:03d}_{strip_id}_{i}.png'
         piece.save(os.path.join(app.config['UPLOAD_FOLDER'], pname))
         results.append(pname)
         
@@ -110,7 +125,7 @@ def generate():
     rows = int(data.get('grid_rows', 1))
     cols = int(data.get('grid_cols', 5))
     
-    output_width = 2000
+    output_width = 3000
     cell_w = output_width // cols
     cell_h = int(cell_w * (FIXED_HEIGHT / (BOXES_X[0][1] - BOXES_X[0][0])))
     
@@ -154,5 +169,5 @@ def generate():
     return jsonify({'preview': b64})
 
 if __name__ == '__main__':
-    # 確保依賴庫已安裝: pip install opencv-python numpy
+    print("伺服器已啟動，請確認資料夾路徑是否有中文...")
     app.run(debug=True, port=5000)
