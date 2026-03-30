@@ -10,6 +10,7 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 TAGS_FOLDER = os.path.join(os.path.dirname(__file__), 'filter_tags')
 SORT_TAGS_FOLDER = os.path.join(os.path.dirname(__file__), 'sort_tags')
 ANCHOR_FOLDER = os.path.join(os.path.dirname(__file__), 'anchor')
+SPECIAL_TAGS = os.path.join(os.path.dirname(__file__), 'special_tags')
 
 # 確保所有必要資料夾都存在
 for folder in [UPLOAD_FOLDER, TAGS_FOLDER, SORT_TAGS_FOLDER, ANCHOR_FOLDER]:
@@ -19,8 +20,9 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['TAGS_FOLDER'] = TAGS_FOLDER
 app.config['SORT_TAGS_FOLDER'] = SORT_TAGS_FOLDER
 app.config['ANCHOR_FOLDER'] = ANCHOR_FOLDER
+app.config['SPECIIAL_TAG'] = SPECIAL_TAGS
 
-# 定義裁切座標與高度
+# 定義裁切座標與高度 2622
 BOXES_X = [[661, 963], [988, 1290], [1315, 1618], [1644, 1946], [1973, 2274]]
 FIXED_HEIGHT = 552
 
