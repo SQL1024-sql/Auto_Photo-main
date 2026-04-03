@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>造型製圖工具 - Mobile Ready</title>
+<style>
+/* ──────────────────────────────────────────────────
+   深色風格 UI
+   ────────────────────────────────────────────────── */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: monospace; background: #1a1a1a; color: #e0e0e0; font-size: 14px; padding-bottom: 50px; }
+.panel { padding: 14px 16px; border-bottom: 1px solid #2a2a2a; }
+.panel-title { color: #777; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+.row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+input[type=file], input[type=number] { color: #ccc; background: #222; border: 1px solid #3a3a3a; padding: 4px 8px; font-family: monospace; }
+button { background: #252525; color: #bbb; border: 1px solid #3a3a3a; padding: 6px 12px; cursor: pointer; transition: 0.2s; border-radius: 4px; }
+button:hover { background: #333; color: #fff; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+.ok { border-color: #2e7d32; color: #4caf50; }
+.blue-btn { border-color: #1976d2; color: #42a5f5; }
+.orange-btn { border-color: #e65100; color: #ff9800; }
+
+/* 畫布區域 */
+#canvas-wrap { position: relative; display: inline-block; margin-top: 10px; background: #000; width: 100%; overflow: hidden; }
+canvas { border: 1px solid #333; display: block; cursor: ns-resize; width: 100%; height: auto; touch-action: none; image-rendering: -webkit-optimize-contrast; }
+
+/* 造型資源庫 (Bank) */
+.bank { 
+    display: grid; 
+    grid-template-columns: repeat(20, 1fr); 
+    gap: 4px; 
+    background: #111; 
+    padding: 10px; 
+    border: 1px solid #222; 
+    margin: 10px 0;
+    max-height: 400px;
+    overflow-y: auto;
+}
+.bank img { 
+    width: 100%; 
+    aspect-ratio: 302 / 552; 
+    object-fit: cover; 
+    cursor: grab; 
+    border: 1px solid #333; 
+    background: #222; 
+    transition: transform 0.1s; 
+    user-select: none;
+}
+
+@media (max-width: 1200px) { .bank { grid-template-columns: repeat(10, 1fr); } }
+@media (max-width: 600px) { .bank { grid-template-columns: repeat(5, 1fr); } }
+
+.grid-container { display: grid; padding: 10px; gap: 8px; width: fit-content; background: #111; border: 1px solid #333; }
+.cell { 
+    width: 80px; height: 146px; background: #222; border: 1px dashed #444; 
+    display: flex; align-items: center; justify-content: center; 
+    overflow: hidden; position: relative; cursor: pointer; 
+}
+.cell img { width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
+
+#result-area { display: none; text-align: center; padding: 30px 10px; }
+#result-img { max-width: 100%; border: 1px solid #444; box-shadow: 0 0 30px rgba(0,0,0,0.8); }
+</style>
+</head>
+<body>
+
+<div class="panel">
+  <div class="panel-title">0. PROJECT / 紀錄檔操作</div>
+  <div class="row">
+    <button class="orange-btn" onclick="exportProject()">匯出專案紀錄 (.json)</button>
+    <button class="orange-btn" onclick="document.getElementById('import-input').click()">📂 匯入專案紀錄</button>
+    <input type="file" id="import-input" style="display:none" accept=".json" onchange="importProject(this)">
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-title">1. COVER / 封面</div>
+  <div class="row">
+    <input type="file" onchange="uploadCover(this)">
+    <span id="cover-status" style="color:#666">尚未上傳</span>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-title">2. STRIP / 造型切割 (支援觸控滑動)</div>
+  <div class="row">
+    <input type="file" id="strip-input" multiple>
+    <button onclick="changeImg(-1)">上一個</button>
+    <span id="nav-info" style="color:#aaa;">0 / 0</span>
+    <button onclick="changeImg(1)">下一個</button>
+    <button class="ok" id="cut-btn" onclick="cutAll()">開始切割並過濾</button>
+  </div>
+  <div id="canvas-wrap" style="display:none;"><canvas id="c"></canvas></div>
+</div>
+
+<div class="panel">
+  <div class="panel-title">3. BANK / 造型資源庫</div>
+  <div class="bank" id="bank"></div>
+  
+  <div class="panel-title" style="margin-top:20px;">4. GRID / 排版</div>
+  <div class="row">
+    列 <input type="number" id="rows" value="2" style="width:50px">
+    欄 <input type="number" id="cols" value="5" style="width:50px">
+    <button onclick="initGrid()">重建表格</button>
+    <button class="blue-btn" onclick="autoFill()">自動填滿</button>
+    <button class="ok" onclick="generate()">生成圖片</button>
+  </div>
+  <div id="grid-wrap" style="margin-top:10px;"></div>
+</div>
+
+<div class="panel" id="result-area">
+  <div class="panel-title">FINAL RESULT</div>
+  <img id="result-img">
+</div>
+
+<script>
+let images = [], cur = 0, cells = [], allPieces = [], dragSrc = null, coverFile = null;
+const FIXED_H = 538;
+const BOXES_X = [[634, 928], [953, 1246], [1270, 1565], [1589, 1882], [1907, 2200]];
+const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+
+// ──────────────────────────────────────────────────
+// 1. 核心畫布操作 (支援手機滑動)
+// ──────────────────────────────────────────────────
+
+function updateY(clientY) {
+    if (!images[cur]) return;
+    const rect = canvas.getBoundingClientRect();
+    const scale = canvas.height / rect.height;
+    const ny = (clientY - rect.top) * scale - (FIXED_H / 2);
+    images[cur].y = Math.max(0, Math.min(ny, images[cur].img.height - FIXED_H));
+    draw();
+}
+
+// 滑鼠事件
+canvas.onmousedown = (e) => {
+    updateY(e.clientY);
+    window.onmousemove = (m) => updateY(m.clientY);
+    window.onmouseup = () => window.onmousemove = null;
+};
+
+// 觸控事件 (解決手機滑動問題)
+canvas.addEventListener('touchstart', (e) => {
+    if (e.target === canvas) e.preventDefault();
+    updateY(e.touches[0].clientY);
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+    if (e.target === canvas) e.preventDefault();
+    updateY(e.touches[0].clientY);
+}, { passive: false });
+
+function draw() {
+    const e = images[cur], yt = e.y, yb = yt + FIXED_H;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(e.img, 0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, canvas.width, yt);
+    ctx.fillRect(0, yb, canvas.width, canvas.height - yb);
+    ctx.strokeStyle = '#00ff00'; ctx.lineWidth = 5;
+    BOXES_X.forEach(b => ctx.strokeRect(b[0], yt, b[1]-b[0], FIXED_H));
+}
+
+// ──────────────────────────────────────────────────
+// 2. 檔案上傳與切割
+// ──────────────────────────────────────────────────
+
+async function uploadCover(input) {
+    if(!input.files[0]) return;
+    const fd = new FormData(); fd.append('cover', input.files[0]);
+    const res = await fetch('/upload_cover', {method:'POST', body:fd});
+    const data = await res.json();
+    coverFile = data.filename;
+    document.getElementById('cover-status').innerText = "已就緒";
+}
+
+document.getElementById('strip-input').onchange = function(e) {
+    images = []; let loaded = 0;
+    const files = Array.from(e.target.files);
+    files.forEach((f, i) => {
+        const img = new Image();
+        img.onload = () => {
+            images[i] = { f, img, y: Math.round(img.height * 0.4) };
+            if(++loaded === files.length) {
+                document.getElementById('canvas-wrap').style.display='block';
+                showImg(0);
+            }
+        };
+        img.src = URL.createObjectURL(f);
+    });
+};
+
+function showImg(idx) {
+    cur = idx; const e = images[idx];
+    canvas.width = e.img.width; canvas.height = e.img.height;
+    document.getElementById('nav-info').innerText = `${idx+1} / ${images.length}`;
+    draw();
+}
+
+async function cutAll() {
+    const btn = document.getElementById('cut-btn');
+    btn.disabled = true; btn.innerText = "處理中...";
+    for(let e of images) {
+        const fd = new FormData(); fd.append('strip', e.f); fd.append('y_top', Math.round(e.y));
+        const res = await fetch('/upload_strip', {method:'POST', body:fd});
+        const data = await res.json();
+        if(data.pieces) {
+            data.pieces.forEach(p => { if(!allPieces.includes(p)) allPieces.push(p); });
+        }
+    }
+    btn.disabled = false; btn.innerText = "✂ 開始切割並過濾";
+    renderAll();
+}
+
+// ──────────────────────────────────────────────────
+// 3. 格位與自動填滿
+// ──────────────────────────────────────────────────
+
+function initGrid() {
+    const r = parseInt(document.getElementById('rows').value);
+    const c = parseInt(document.getElementById('cols').value);
+    const targetCount = r * c;
+    if (cells.length > targetCount) cells = cells.slice(0, targetCount);
+    else while (cells.length < targetCount) cells.push(null);
+    renderAll();
+}
+
+function renderAll() {
+    const r = parseInt(document.getElementById('rows').value), c = parseInt(document.getElementById('cols').value);
+    const wrap = document.getElementById('grid-wrap');
+    wrap.innerHTML = `<div class="grid-container" style="grid-template-columns:repeat(${c}, 80px)"></div>`;
+    const container = wrap.firstChild;
+
+    for(let i=0; i<cells.length; i++) {
+        const div = document.createElement('div');
+        div.className = 'cell'; div.dataset.index = i;
+        div.innerHTML = cells[i] ? `<img src="/image/${cells[i]}">` : '';
+        div.onclick = () => { if (cells[i]) { cells.splice(i, 1); cells.push(null); renderAll(); } };
+        // 拖曳支援 (桌機)
+        div.ondragover = (e) => e.preventDefault();
+        div.ondrop = (e) => { e.preventDefault(); addToCell(e.dataTransfer.getData('text'), i); };
+        div.draggable = true;
+        div.ondragstart = (e) => { if(!cells[i]) return e.preventDefault(); dragSrc={type:'cell',idx:i}; e.dataTransfer.setData('text', cells[i]); };
+        container.appendChild(div);
+    }
+
+    const bank = document.getElementById('bank');
+    bank.innerHTML = '';
+    const sortedBank = [...allPieces].sort().reverse();
+    sortedBank.forEach(fn => {
+        const img = document.createElement('img');
+        img.src = `/image/${fn}`; 
+        img.className = cells.includes(fn) ? 'used' : '';
+        img.onclick = () => {
+            if(cells.includes(fn)) return; 
+            const emptyIdx = cells.indexOf(null);
+            if(emptyIdx !== -1) { cells[emptyIdx] = fn; renderAll(); }
+        };
+        img.draggable = true;
+        img.ondragstart = (e) => { dragSrc={type:'bank'}; e.dataTransfer.setData('text', fn); };
+        bank.appendChild(img);
+    });
+}
+
+function addToCell(fn, targetIdx) {
+    const totalSize = cells.length;
+    if(dragSrc && dragSrc.type === 'bank') {
+        cells.splice(targetIdx, 0, fn);
+        cells = cells.slice(0, totalSize);
+    } else if(dragSrc && dragSrc.type === 'cell') {
+        const item = cells.splice(dragSrc.idx, 1)[0];
+        cells.splice(targetIdx, 0, item);
+        if (cells.length < totalSize) cells.push(null);
+    }
+    renderAll();
+}
+
+function autoFill() {
+    const sortedList = [...allPieces].sort().reverse();
+    const currentUsed = cells.filter(c => c !== null);
+    const available = sortedList.filter(fn => !currentUsed.includes(fn));
+    let aIdx = 0;
+    for(let i=0; i<cells.length; i++) {
+        if(!cells[i] && aIdx < available.length) cells[i] = available[aIdx++];
+    }
+    renderAll();
+}
+
+// ──────────────────────────────────────────────────
+// 4. 生成與專案紀錄
+// ──────────────────────────────────────────────────
+
+async function generate() {
+    const res = await fetch('/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            cover: coverFile, cells: cells,
+            grid_rows: document.getElementById('rows').value,
+            grid_cols: document.getElementById('cols').value
+        })
+    });
+    const data = await res.json();
+    if(data.preview) {
+        document.getElementById('result-area').style.display = 'block';
+        document.getElementById('result-img').src = 'data:image/jpeg;base64,' + data.preview;
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }
+}
+
+function exportProject() {
+    const data = { coverFile, allPieces, cells, rows: document.getElementById('rows').value, cols: document.getElementById('cols').value };
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `project_${Date.now()}.json`; a.click();
+}
+
+function importProject(input) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const data = JSON.parse(e.target.result);
+        coverFile = data.coverFile; allPieces = data.allPieces; cells = data.cells;
+        document.getElementById('rows').value = data.rows; document.getElementById('cols').value = data.cols;
+        renderAll();
+    };
+    reader.readAsText(input.files[0]);
+}
+
+function changeImg(s) { cur = (cur+s+images.length)%images.length; showImg(cur); }
+initGrid();
+</script>
+</body>
+</html>
