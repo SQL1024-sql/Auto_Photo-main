@@ -101,6 +101,20 @@ canvas { border: 1px solid #333; display: block; cursor: ns-resize; width: 100%;
 </div>
 
 <div class="panel">
+  <div class="panel-title">2.5. 標籤閾值設定</div>
+  <div style="font-size:11px; color:#555; line-height:1.8; margin-bottom:8px;">
+    每個標籤可單獨設閾值（0.00~1.00）。值越低越容易命中，越高越嚴格。<br>
+    <span style="color:#42a5f5">sort_tags</span> 建議 0.75~0.85．
+    <span style="color:#ff9800">special_tags</span> 權重建議用 100~999，不會跟 sort_tags 衝突。
+  </div>
+  <div id="tag-config-list" style="max-height:260px; overflow-y:auto;"></div>
+  <div class="row" style="margin-top:8px;">
+    <button class="ok" onclick="saveTagConfig()">儲存閾值設定</button>
+    <span id="tag-config-status" style="color:#666; font-size:12px;"></span>
+  </div>
+</div>
+
+<div class="panel">
   <div class="panel-title">3. BANK / 造型資源庫</div>
   <div class="bank" id="bank"></div>
   
@@ -378,6 +392,50 @@ function importProject(input) {
 }
 
 function changeImg(s) { cur = (cur+s+images.length)%images.length; showImg(cur); }
+
+// ──────────────────────────────────────────────────
+// 標籤閾值設定
+// ──────────────────────────────────────────────────
+let tagConfigData = [];
+
+async function loadTagConfig() {
+    const res  = await fetch('/sort_tags_config');
+    const data = await res.json();
+    tagConfigData = data.tags || [];
+    renderTagConfig();
+}
+
+function renderTagConfig() {
+    const list = document.getElementById('tag-config-list');
+    if (!tagConfigData.length) {
+        list.innerHTML = '<div style="color:#444; font-size:12px;">sort_tags / special_tags 資料夾內目前沒有標籤圖</div>';
+        return;
+    }
+    list.innerHTML = tagConfigData.map((t, i) => `
+        <div class="row" style="background:#1a1a1a; border:1px solid #2a2a2a; padding:5px 10px; margin-bottom:3px; gap:8px;">
+            <span style="color:${t.folder==='sort'?'#42a5f5':'#ff9800'}; font-size:10px; width:44px; flex-shrink:0;">${t.folder}</span>
+            <span style="flex:1; color:#ccc; font-size:12px; word-break:break-all;">${t.name}</span>
+            <span style="color:#555; font-size:11px; white-space:nowrap;">w=${t.weight}</span>
+            <input type="number" value="${t.threshold}" min="0.05" max="1.00" step="0.01"
+                style="width:58px; background:#222; border:1px solid #3a3a3a; color:#ccc; padding:2px 4px; font-family:monospace;"
+                onchange="tagConfigData[${i}].threshold=parseFloat(this.value)">
+        </div>
+    `).join('');
+}
+
+async function saveTagConfig() {
+    const res  = await fetch('/sort_tags_config', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ tags: tagConfigData })
+    });
+    const data = await res.json();
+    const el   = document.getElementById('tag-config-status');
+    el.style.color = data.ok ? '#4caf50' : '#f44336';
+    el.innerText   = data.ok ? `已儲存 ${tagConfigData.length} 筆` : '儲存失敗';
+}
+
+loadTagConfig();
 initGrid();
 </script>
 </body>

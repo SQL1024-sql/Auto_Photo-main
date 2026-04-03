@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh -p 14297 root@ssh5.vast.ai -L 8080:localhost:8080)",
+      "Bash(ssh -p 14297 root@ssh5.vast.ai -o StrictHostKeyChecking=no -o BatchMode=yes \"echo connected && whoami && pwd\")",
+      "Bash(rsync -avz -e 'ssh -p 14297 -o StrictHostKeyChecking=no' --exclude=.git --exclude=.claude '--exclude=uploads/*' --exclude=__pycache__ --exclude=Finished '--exclude=*.jpg' '--exclude=*.json' --exclude=llm_rules.json c:/Users/Wang/Desktop/Auto_Photo-main/ root@ssh5.vast.ai:/root/auto_photo/)",
+      "Bash(tar -czf /tmp/auto_photo.tar.gz --exclude=.git --exclude=.claude --exclude=uploads --exclude=__pycache__ --exclude=Finished '--exclude=f4bdba75*.jpg' --exclude=acc.jpg --exclude=llm_rules.json .)",
+      "Bash(scp -P 14297 -o StrictHostKeyChecking=no /tmp/auto_photo.tar.gz root@ssh5.vast.ai:/root/)",
+      "Bash(ssh -p 14297 -o StrictHostKeyChecking=no root@ssh5.vast.ai ':*)",
+      "Bash(ssh -p 14297 -o StrictHostKeyChecking=no root@ssh5.vast.ai \"cat /root/app.log\")",
+      "Bash(ssh -p 14297 -o StrictHostKeyChecking=no root@ssh5.vast.ai \"python3 /root/test_clip.py\")",
+      "Bash(ssh -p 14297 -o StrictHostKeyChecking=no root@ssh5.vast.ai \"python3 /root/test_clip2.py\")",
+      "Bash(ssh -p:*)",
+      "Bash(grep -v \"^$\")",
+      "Bash(shuf)",
+      "Bash(scp -P 14297 -o StrictHostKeyChecking=no c:/Users/Wang/Desktop/Auto_Photo-main/uploads/w060_392cb69df3db400cab6a56d534bfa4d1_3.png root@ssh5.vast.ai:/root/test_piece.png)",
+      "Bash(scp -P 14297 -o StrictHostKeyChecking=no c:/Users/Wang/Desktop/Auto_Photo-main/uploads/w000_03bb74405ee9417f979de49a1a22a3b8_0.png root@ssh5.vast.ai:/root/test_piece.png)",
+      "Bash(scp -P 14297 -o StrictHostKeyChecking=no c:/Users/Wang/Desktop/Auto_Photo-main/uploads/w060_392cb69df3db400cab6a56d534bfa4d1_3.png root@ssh5.vast.ai:/root/test_w060.png)",
+      "Bash(scp -P 14297 -o StrictHostKeyChecking=no c:/Users/Wang/Desktop/Auto_Photo-main/uploads/w000_03bb74405ee9417f979de49a1a22a3b8_0.png root@ssh5.vast.ai:/root/test_w000.png)",
+      "Bash(tar -czf /tmp/auto_photo_update.tar.gz app-2622-llm.py templates/index-2622-llm.html)",
+      "Bash(scp -P 14297 -o StrictHostKeyChecking=no /tmp/auto_photo_update.tar.gz root@ssh5.vast.ai:/root/)",
+      "Bash(scp -P 14297 -o StrictHostKeyChecking=no c:/Users/Wang/Desktop/Auto_Photo-main/app-2622-llm.py root@ssh5.vast.ai:/root/auto_photo/app-2622-llm.py)",
+      "Bash(scp -P 14297 -o StrictHostKeyChecking=no c:/Users/Wang/Desktop/Auto_Photo-main/templates/index-2622-llm.html root@ssh5.vast.ai:/root/auto_photo/templates/index-2622-llm.html)"
+    ]
+  }
+}
