@@ -26,25 +26,25 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 canvas { border: 1px solid #333; display: block; cursor: ns-resize; width: 100%; height: auto; touch-action: none; image-rendering: -webkit-optimize-contrast; }
 
 /* 造型資源庫 (Bank) */
-.bank { 
-    display: grid; 
-    grid-template-columns: repeat(20, 1fr); 
-    gap: 4px; 
-    background: #111; 
-    padding: 10px; 
-    border: 1px solid #222; 
+.bank {
+    display: grid;
+    grid-template-columns: repeat(20, 1fr);
+    gap: 4px;
+    background: #111;
+    padding: 10px;
+    border: 1px solid #222;
     margin: 10px 0;
     max-height: 400px;
     overflow-y: auto;
 }
-.bank img { 
-    width: 100%; 
-    aspect-ratio: 302 / 552; 
-    object-fit: cover; 
-    cursor: grab; 
-    border: 1px solid #333; 
-    background: #222; 
-    transition: transform 0.1s; 
+.bank img {
+    width: 100%;
+    aspect-ratio: 302 / 552;
+    object-fit: cover;
+    cursor: grab;
+    border: 1px solid #333;
+    background: #222;
+    transition: transform 0.1s;
     user-select: none;
 }
 
@@ -52,7 +52,7 @@ canvas { border: 1px solid #333; display: block; cursor: ns-resize; width: 100%;
 @media (max-width: 600px) { .bank { grid-template-columns: repeat(5, 1fr); } }
 
 .grid-container { display: grid; padding: 10px; gap: 8px; width: fit-content; background: #111; border: 1px solid #333; }
-.cell { 
+.cell {
     width: 80px; height: 146px; background: #222; border: 1px dashed #444; 
     display: flex; align-items: center; justify-content: center; 
     overflow: hidden; position: relative; cursor: pointer; 
@@ -103,7 +103,7 @@ canvas { border: 1px solid #333; display: block; cursor: ns-resize; width: 100%;
 <div class="panel">
   <div class="panel-title">3. BANK / 造型資源庫</div>
   <div class="bank" id="bank"></div>
-  
+
   <div class="panel-title" style="margin-top:20px;">4. GRID / 排版</div>
   <div class="row">
     列 <input type="number" id="rows" value="2" style="width:50px">
@@ -337,6 +337,7 @@ function autoFill() {
 // ──────────────────────────────────────────────────
 // 5. 生成與專案紀錄
 // ──────────────────────────────────────────────────
+
 
 async function generate() {
     const btn = document.getElementById('generate-btn');
