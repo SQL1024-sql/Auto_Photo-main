@@ -12,7 +12,6 @@ SORT_TAGS_FOLDER = os.path.join(os.path.dirname(__file__), 'sort_tags')
 ANCHOR_FOLDER = os.path.join(os.path.dirname(__file__), 'anchor')
 SPECIAL_TAGS_FOLDER = os.path.join(os.path.dirname(__file__), 'special_tags')
 
-# 確保所有必要資料夾都存在
 for folder in [UPLOAD_FOLDER, TAGS_FOLDER, SORT_TAGS_FOLDER, ANCHOR_FOLDER, SPECIAL_TAGS_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
@@ -22,84 +21,74 @@ app.config['SORT_TAGS_FOLDER'] = SORT_TAGS_FOLDER
 app.config['ANCHOR_FOLDER'] = ANCHOR_FOLDER
 app.config['SPECIAL_TAGS_FOLDER'] = SPECIAL_TAGS_FOLDER
 
-# 定義裁切座標與高度
 BOXES_X = [[512, 755], [768, 1011], [1024, 1267], [1281, 1523], [1537, 1780]]
 FIXED_HEIGHT = 440
 
 def cv_imread_unicode(file_path):
-    """支援中文路徑與檔名的 OpenCV 讀取方式"""
     try:
         return cv2.imdecode(np.fromfile(file_path, dtype=np.uint8), cv2.IMREAD_COLOR)
     except Exception as e:
         print(f"讀取圖檔失敗 ({file_path}): {e}")
         return None
 
-def get_matching_info(image_piece):
-    """
-    掃描資料夾，同時進行過濾檢查與權重計算
-    回傳: (是否應過濾, 權重分數)
-    """
-    # 轉換 PIL 為 OpenCV 格式
-    target_bgr = cv2.cvtColor(np.array(image_piece.convert('RGB')), cv2.COLOR_RGB2BGR)
-    h, w = target_bgr.shape[:2]
-    # 鎖定標籤常出現的右上角 ROI 區域 (y:0-130, x:40%寬度到最後)
-    roi = target_bgr[0:130, int(w*0.4):w]
+# 模板快取：啟動時一次性載入，避免每次請求都讀磁碟
+_template_cache = {'filter': [], 'weight': []}
 
-    # 1. 檢查是否需要過濾 (filter_tags)
-    filter_files = [f for f in os.listdir(app.config['TAGS_FOLDER'])
-                    if f.lower().endswith(('.png', '.jpg', '.jpeg')) and not f.startswith('.')]
+def _load_templates_from_folder(folder, is_filter=False):
+    results = []
+    for fname in os.listdir(folder):
+        if not fname.lower().endswith(('.png', '.jpg', '.jpeg')) or fname.startswith('.'):
+            continue
+        img = cv_imread_unicode(os.path.join(folder, fname))
+        if img is None:
+            continue
+        weight = 0
+        if not is_filter:
+            try:
+                weight = int(fname.split('_')[-1].split('.')[0])
+            except Exception:
+                pass
+        results.append((fname, img, weight))
+    return results
 
-    for tag_name in filter_files:
-        template = cv_imread_unicode(os.path.join(app.config['TAGS_FOLDER'], tag_name))
-        if template is None: continue
-        if template.shape[0] > roi.shape[0] or template.shape[1] > roi.shape[1]: continue
+def reload_templates():
+    _template_cache['filter'] = _load_templates_from_folder(TAGS_FOLDER, is_filter=True)
+    _template_cache['weight'] = (
+        _load_templates_from_folder(SORT_TAGS_FOLDER) +
+        _load_templates_from_folder(SPECIAL_TAGS_FOLDER)
+    )
+    print(f"[模板快取] filter={len(_template_cache['filter'])}, weight={len(_template_cache['weight'])}")
 
-        res = cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, _ = cv2.minMaxLoc(res)
+reload_templates()
+
+# 模組層級 executor，避免每次請求重建執行緒池
+_executor = ThreadPoolExecutor(max_workers=4)
+
+def get_matching_info(roi):
+    # 1. 過濾檢查 (filter_tags)
+    for tag_name, template, _ in _template_cache['filter']:
+        if template.shape[0] > roi.shape[0] or template.shape[1] > roi.shape[1]:
+            continue
+        _, max_val, _, _ = cv2.minMaxLoc(cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED))
         if max_val > 0.9:
             print(f"命中過濾標籤: {tag_name} ({max_val:.2f})")
             return True, 0
 
-    # 2. 計算權重分數 (sort_tags)
+    # 2. 計算權重分數 (sort_tags + special_tags 合併)
     max_weight = 0
-    sort_files = [f for f in os.listdir(app.config['SORT_TAGS_FOLDER'])
-                  if f.lower().endswith(('.png', '.jpg', '.jpeg')) and not f.startswith('.')]
-
-    for sf in sort_files:
-        template = cv_imread_unicode(os.path.join(app.config['SORT_TAGS_FOLDER'], sf))
-        if template is None: continue
-        if template.shape[0] > roi.shape[0] or template.shape[1] > roi.shape[1]: continue
-
-        res = cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, _ = cv2.minMaxLoc(res)
-
+    for _, template, weight in _template_cache['weight']:
+        if template.shape[0] > roi.shape[0] or template.shape[1] > roi.shape[1]:
+            continue
+        _, max_val, _, _ = cv2.minMaxLoc(cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED))
         if max_val > 0.8:
-            try:
-                # 解析檔名 "tag_090.png" 取得 90
-                weight = int(sf.split('_')[-1].split('.')[0])
-                max_weight = max(max_weight, weight)
-            except: pass
-
-    # 3. 計算權重分數 (special_tags)
-    special_files = [f for f in os.listdir(app.config['SPECIAL_TAGS_FOLDER'])
-                     if f.lower().endswith(('.png', '.jpg', '.jpeg')) and not f.startswith('.')]
-
-    for sf in special_files:
-        template = cv_imread_unicode(os.path.join(app.config['SPECIAL_TAGS_FOLDER'], sf))
-        if template is None: continue
-        if template.shape[0] > roi.shape[0] or template.shape[1] > roi.shape[1]: continue
-
-        res = cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, _ = cv2.minMaxLoc(res)
-
-        if max_val > 0.8:
-            try:
-                # 解析檔名 "tag_090.png" 取得 90
-                weight = int(sf.split('_')[-1].split('.')[0])
-                max_weight = max(max_weight, weight)
-            except: pass
+            max_weight = max(max_weight, weight)
 
     return False, max_weight
+
+@app.route('/reload_templates', methods=['POST'])
+def reload_templates_route():
+    reload_templates()
+    return jsonify({'filter': len(_template_cache['filter']), 'weight': len(_template_cache['weight'])})
 
 @app.route('/')
 def index():
@@ -111,7 +100,6 @@ def serve_image(filename):
 
 @app.route('/upload_anchor', methods=['POST'])
 def upload_anchor():
-    """儲存錨點圖片，供 detect_y 做 template matching 用"""
     f = request.files.get('anchor')
     if not f: return jsonify({'error': 'No file'}), 400
     anchor_path = os.path.join(app.config['ANCHOR_FOLDER'], 'anchor.png')
@@ -120,10 +108,6 @@ def upload_anchor():
 
 @app.route('/detect_y', methods=['POST'])
 def detect_y():
-    """
-    在 strip 圖中尋找錨點，回傳對齊後的 y_top。
-    y_top = 錨點頂部 Y + y_offset
-    """
     f = request.files.get('strip')
     y_offset = int(request.form.get('y_offset', 0))
     if not f:
@@ -135,7 +119,6 @@ def detect_y():
         print("[detect_y] 400: anchor.png not found at", anchor_path)
         return jsonify({'error': 'No anchor uploaded'}), 400
 
-    # 讀取 strip（來自記憶體流，不存檔）
     img_data = np.frombuffer(f.read(), dtype=np.uint8)
     strip_bgr = cv2.imdecode(img_data, cv2.IMREAD_COLOR)
     if strip_bgr is None:
@@ -163,7 +146,6 @@ def detect_y():
     if max_val < 0.7:
         return jsonify({'found': False, 'score': round(float(max_val), 3)})
 
-    # max_loc[1] 是相對於下半部的 Y，加回 half_y 換算成全圖座標
     anchor_y = max_loc[1] + half_y
     y_top = int(np.clip(anchor_y + y_offset, 0, strip_h - FIXED_HEIGHT))
     return jsonify({'found': True, 'y_top': y_top, 'score': round(float(max_val), 3)})
@@ -177,10 +159,12 @@ def upload_cover():
     return jsonify({'filename': fname})
 
 def _process_piece(args):
-    """裁切單一格並進行過濾/權重比對，供多執行緒呼叫。"""
     img, i, x1, x2, y_top, strip_id, upload_folder = args
     piece = img.crop((x1, y_top, x2, y_top + FIXED_HEIGHT))
-    is_filter, weight = get_matching_info(piece)
+    bgr = cv2.cvtColor(np.array(piece.convert('RGB')), cv2.COLOR_RGB2BGR)
+    w = bgr.shape[1]
+    roi = bgr[0:130, int(w * 0.4):w]
+    is_filter, weight = get_matching_info(roi)
     if is_filter:
         return None
     pname = f'w{weight:03d}_{strip_id}_{i}.png'
@@ -202,10 +186,8 @@ def upload_strip():
         for i, (x1, x2) in enumerate(BOXES_X)
     ]
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        raw = list(executor.map(_process_piece, args_list))
+    raw = list(_executor.map(_process_piece, args_list))
 
-    # 過濾掉被捨棄的格（None），並保留原始欄位順序
     results = [r for r in raw if r is not None]
     return jsonify({'pieces': results})
 

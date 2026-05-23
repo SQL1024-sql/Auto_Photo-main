@@ -93,7 +93,7 @@ canvas { border: 1px solid #333; display: block; cursor: ns-resize; width: 100%;
   </div>
   <div class="row" style="border-top:1px solid #2a2a2a; padding-top:8px; margin-top:4px;">
     <span style="color:#777; font-size:11px;">錨點自動定位：</span>
-    Y偏移 <input type="number" id="y-offset" value="-494" style="width:70px" title="錨點頂部 + 此值 = y_top，正數往下、負數往上">
+    Y偏移 <input type="number" id="y-offset" value="-495" style="width:70px" title="錨點頂部 + 此值 = y_top，正數往下、負數往上">
     <button class="blue-btn" id="detect-btn" onclick="autoDetectY()">⊙ 自動定位全部</button>
     <span id="detect-status" style="color:#aaa"></span>
   </div>
@@ -117,13 +117,16 @@ canvas { border: 1px solid #333; display: block; cursor: ns-resize; width: 100%;
 
 <div class="panel" id="result-area">
   <div class="panel-title">FINAL RESULT</div>
+  <div style="margin-bottom:12px;">
+    <button class="ok" onclick="downloadResult()">下載圖片</button>
+  </div>
   <img id="result-img">
 </div>
 
 <script>
 let images = [], cur = 0, cells = [], allPieces = [], dragSrc = null, coverFile = null;
-const FIXED_H = 552;
-const BOXES_X = [[661, 963], [988, 1290], [1315, 1618], [1644, 1946], [1973, 2274]];
+const FIXED_H = 565;
+const BOXES_X = [[657, 965], [985, 1294], [1313, 1621], [1641, 1949], [1969, 2278]];
 const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
 
 // ──────────────────────────────────────────────────
@@ -376,6 +379,15 @@ function importProject(input) {
         renderAll();
     };
     reader.readAsText(input.files[0]);
+}
+
+function downloadResult() {
+    const img = document.getElementById('result-img');
+    if (!img.src) return;
+    const a = document.createElement('a');
+    a.href = img.src;
+    a.download = `result_${Date.now()}.jpg`;
+    a.click();
 }
 
 function changeImg(s) { cur = (cur+s+images.length)%images.length; showImg(cur); }

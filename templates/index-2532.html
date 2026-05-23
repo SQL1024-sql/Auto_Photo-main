@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>造型製圖工具 - Mobile Ready</title>
+<title>造型製圖工具</title>
 <style>
 /* ──────────────────────────────────────────────────
    深色風格 UI
@@ -26,25 +26,25 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 canvas { border: 1px solid #333; display: block; cursor: ns-resize; width: 100%; height: auto; touch-action: none; image-rendering: -webkit-optimize-contrast; }
 
 /* 造型資源庫 (Bank) */
-.bank { 
-    display: grid; 
-    grid-template-columns: repeat(20, 1fr); 
-    gap: 4px; 
-    background: #111; 
-    padding: 10px; 
-    border: 1px solid #222; 
+.bank {
+    display: grid;
+    grid-template-columns: repeat(20, 1fr);
+    gap: 4px;
+    background: #111;
+    padding: 10px;
+    border: 1px solid #222;
     margin: 10px 0;
     max-height: 400px;
     overflow-y: auto;
 }
-.bank img { 
-    width: 100%; 
-    aspect-ratio: 302 / 552; 
-    object-fit: cover; 
-    cursor: grab; 
-    border: 1px solid #333; 
-    background: #222; 
-    transition: transform 0.1s; 
+.bank img {
+    width: 100%;
+    aspect-ratio: 302 / 552;
+    object-fit: cover;
+    cursor: grab;
+    border: 1px solid #333;
+    background: #222;
+    transition: transform 0.1s;
     user-select: none;
 }
 
@@ -52,7 +52,7 @@ canvas { border: 1px solid #333; display: block; cursor: ns-resize; width: 100%;
 @media (max-width: 600px) { .bank { grid-template-columns: repeat(5, 1fr); } }
 
 .grid-container { display: grid; padding: 10px; gap: 8px; width: fit-content; background: #111; border: 1px solid #333; }
-.cell { 
+.cell {
     width: 80px; height: 146px; background: #222; border: 1px dashed #444; 
     display: flex; align-items: center; justify-content: center; 
     overflow: hidden; position: relative; cursor: pointer; 
@@ -91,33 +91,42 @@ canvas { border: 1px solid #333; display: block; cursor: ns-resize; width: 100%;
     <button onclick="changeImg(1)">下一個</button>
     <button class="ok" id="cut-btn" onclick="cutAll()">開始切割並過濾</button>
   </div>
+  <div class="row" style="border-top:1px solid #2a2a2a; padding-top:8px; margin-top:4px;">
+    <span style="color:#777; font-size:11px;">錨點自動定位：</span>
+    Y偏移 <input type="number" id="y-offset" value="-480" style="width:70px" title="錨點頂部 + 此值 = y_top，正數往下、負數往上">
+    <button class="blue-btn" id="detect-btn" onclick="autoDetectY()">⊙ 自動定位全部</button>
+    <span id="detect-status" style="color:#aaa"></span>
+  </div>
   <div id="canvas-wrap" style="display:none;"><canvas id="c"></canvas></div>
 </div>
 
 <div class="panel">
   <div class="panel-title">3. BANK / 造型資源庫</div>
   <div class="bank" id="bank"></div>
-  
+
   <div class="panel-title" style="margin-top:20px;">4. GRID / 排版</div>
   <div class="row">
     列 <input type="number" id="rows" value="2" style="width:50px">
     欄 <input type="number" id="cols" value="5" style="width:50px">
     <button onclick="initGrid()">重建表格</button>
     <button class="blue-btn" onclick="autoFill()">自動填滿</button>
-    <button class="ok" onclick="generate()">生成圖片</button>
+    <button class="ok" id="generate-btn" onclick="generate()">生成圖片</button>
   </div>
   <div id="grid-wrap" style="margin-top:10px;"></div>
 </div>
 
 <div class="panel" id="result-area">
   <div class="panel-title">FINAL RESULT</div>
+  <div style="margin-bottom:12px;">
+    <button class="ok" onclick="downloadResult()">下載圖片</button>
+  </div>
   <img id="result-img">
 </div>
 
 <script>
 let images = [], cur = 0, cells = [], allPieces = [], dragSrc = null, coverFile = null;
-const FIXED_H = 538;
-const BOXES_X = [[634, 928], [953, 1246], [1270, 1565], [1589, 1882], [1907, 2200]];
+const FIXED_H = 548;
+const BOXES_X = [[632, 930], [950, 1249], [1268, 1576], [1586, 1885], [1904, 2203]];
 const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
 
 // ──────────────────────────────────────────────────
@@ -160,10 +169,51 @@ function draw() {
     ctx.fillRect(0, yb, canvas.width, canvas.height - yb);
     ctx.strokeStyle = '#00ff00'; ctx.lineWidth = 5;
     BOXES_X.forEach(b => ctx.strokeRect(b[0], yt, b[1]-b[0], FIXED_H));
+
+    // Y 座標 overlay
+    const label = `y_top = ${yt}`;
+    ctx.font = 'bold 36px monospace';
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(8, 8, ctx.measureText(label).width + 16, 50);
+    ctx.fillStyle = '#00ff00';
+    ctx.fillText(label, 16, 46);
 }
 
 // ──────────────────────────────────────────────────
-// 2. 檔案上傳與切割
+// 2. 錨點上傳與自動定位
+// ──────────────────────────────────────────────────
+
+async function autoDetectY() {
+    if (!images.length) { alert('請先載入條圖'); return; }
+    const offset = parseInt(document.getElementById('y-offset').value) || 0;
+    const btn = document.getElementById('detect-btn');
+    const statusEl = document.getElementById('detect-status');
+    btn.disabled = true; btn.innerText = '偵測中...';
+    statusEl.innerText = '';
+
+    let ok = 0, fail = 0;
+    for (let i = 0; i < images.length; i++) {
+        const fd = new FormData();
+        fd.append('strip', images[i].f);
+        fd.append('y_offset', offset);
+        const res = await fetch('/detect_y', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.found) {
+            images[i].y = data.y_top;
+            ok++;
+        } else {
+            fail++;
+        }
+    }
+
+    btn.disabled = false; btn.innerText = '⊙ 自動定位全部';
+    statusEl.style.color = fail ? '#ff9800' : '#4caf50';
+    statusEl.innerText = `${ok} 成功 / ${fail} 失敗`;
+    if (images[cur]) { showImg(cur); }
+}
+
+// ──────────────────────────────────────────────────
+// 3. 檔案上傳與切割
 // ──────────────────────────────────────────────────
 
 async function uploadCover(input) {
@@ -209,12 +259,12 @@ async function cutAll() {
             data.pieces.forEach(p => { if(!allPieces.includes(p)) allPieces.push(p); });
         }
     }
-    btn.disabled = false; btn.innerText = "✂ 開始切割並過濾";
+    btn.disabled = false; btn.innerText = "開始切割並過濾";
     renderAll();
 }
 
 // ──────────────────────────────────────────────────
-// 3. 格位與自動填滿
+// 4. 格位與自動填滿
 // ──────────────────────────────────────────────────
 
 function initGrid() {
@@ -288,10 +338,13 @@ function autoFill() {
 }
 
 // ──────────────────────────────────────────────────
-// 4. 生成與專案紀錄
+// 5. 生成與專案紀錄
 // ──────────────────────────────────────────────────
 
+
 async function generate() {
+    const btn = document.getElementById('generate-btn');
+    btn.disabled = true; btn.innerText = '生成中...';
     const res = await fetch('/generate', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -302,6 +355,7 @@ async function generate() {
         })
     });
     const data = await res.json();
+    btn.disabled = false; btn.innerText = '生成圖片';
     if(data.preview) {
         document.getElementById('result-area').style.display = 'block';
         document.getElementById('result-img').src = 'data:image/jpeg;base64,' + data.preview;
@@ -325,6 +379,15 @@ function importProject(input) {
         renderAll();
     };
     reader.readAsText(input.files[0]);
+}
+
+function downloadResult() {
+    const img = document.getElementById('result-img');
+    if (!img.src) return;
+    const a = document.createElement('a');
+    a.href = img.src;
+    a.download = `result_${Date.now()}.jpg`;
+    a.click();
 }
 
 function changeImg(s) { cur = (cur+s+images.length)%images.length; showImg(cur); }

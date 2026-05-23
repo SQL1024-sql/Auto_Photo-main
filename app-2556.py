@@ -20,10 +20,20 @@ app.config['TAGS_FOLDER'] = TAGS_FOLDER
 app.config['SORT_TAGS_FOLDER'] = SORT_TAGS_FOLDER
 app.config['ANCHOR_FOLDER'] = ANCHOR_FOLDER
 app.config['SPECIAL_TAGS_FOLDER'] = SPECIAL_TAGS_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 80 * 1024 * 1024  # 80MB 上傳上限
 
-width = 2622
-BOXES_X = [[657, 965], [985, 1294], [1313, 1621], [1641, 1949], [1969, 2278]]
-FIXED_HEIGHT = 557
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.errorhandler(413)
+def request_entity_too_large(e):
+    return jsonify({'error': '檔案過大，單次上傳上限為 80MB'}), 413
+
+width = 2556
+BOXES_X = [[639, 940], [958, 1261], [1280, 1581], [1600, 1901], [1921, 2223]]
+FIXED_HEIGHT = 551
 
 def cv_imread_unicode(file_path):
     try:
@@ -93,7 +103,6 @@ def reload_templates_route():
 
 @app.route('/')
 def index():
-    
     return render_template(f'index-{width}.html')
 
 @app.route('/image/<filename>')
@@ -104,6 +113,7 @@ def serve_image(filename):
 def upload_anchor():
     f = request.files.get('anchor')
     if not f: return jsonify({'error': 'No file'}), 400
+    if not allowed_file(f.filename): return jsonify({'error': '僅支援 PNG / JPG / JPEG / WEBP'}), 400
     anchor_path = os.path.join(app.config['ANCHOR_FOLDER'], f'anchor-{width}.png')
     Image.open(f).convert('RGB').save(anchor_path)
     return jsonify({'ok': True})
@@ -156,6 +166,7 @@ def detect_y():
 def upload_cover():
     f = request.files.get('cover')
     if not f: return jsonify({'error': 'No file'}), 400
+    if not allowed_file(f.filename): return jsonify({'error': '僅支援 PNG / JPG / JPEG / WEBP'}), 400
     fname = f'cover_{uuid.uuid4().hex}.png'
     f.save(os.path.join(app.config['UPLOAD_FOLDER'], fname))
     return jsonify({'filename': fname})
@@ -178,6 +189,7 @@ def upload_strip():
     f = request.files.get('strip')
     y_top = int(request.form.get('y_top', 0))
     if not f: return jsonify({'error': 'No file'}), 400
+    if not allowed_file(f.filename): return jsonify({'error': '僅支援 PNG / JPG / JPEG / WEBP'}), 400
 
     strip_id = uuid.uuid4().hex
     img = Image.open(f).convert('RGBA')
@@ -246,4 +258,4 @@ def generate():
 
 if __name__ == '__main__':
     print("伺服器已啟動，請確認資料夾路徑是否有中文...")
-    app.run(debug=False, port=2622)
+    app.run(debug=False, port=2556)

@@ -117,6 +117,9 @@ canvas { border: 1px solid #333; display: block; cursor: ns-resize; width: 100%;
 
 <div class="panel" id="result-area">
   <div class="panel-title">FINAL RESULT</div>
+  <div style="margin-bottom:12px;">
+    <button class="ok" onclick="downloadResult()">下載圖片</button>
+  </div>
   <img id="result-img">
 </div>
 
@@ -376,6 +379,15 @@ function importProject(input) {
         renderAll();
     };
     reader.readAsText(input.files[0]);
+}
+
+function downloadResult() {
+    const img = document.getElementById('result-img');
+    if (!img.src) return;
+    const a = document.createElement('a');
+    a.href = img.src;
+    a.download = `result_${Date.now()}.jpg`;
+    a.click();
 }
 
 function changeImg(s) { cur = (cur+s+images.length)%images.length; showImg(cur); }
