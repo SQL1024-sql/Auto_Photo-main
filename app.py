@@ -211,10 +211,10 @@ def detect_y():
         return jsonify({'error': 'Cannot read anchor'}), 400
 
     strip_h = strip_bgr.shape[0]
-    half_y = strip_h // 2
-    search_region = strip_bgr[half_y:, :]
+    search_start = strip_h // 3
+    search_region = strip_bgr[search_start:, :]
 
-    print(f"[detect_y] width={width_val} strip={strip_bgr.shape}, half_y={half_y}, template={template.shape}")
+    print(f"[detect_y] width={width_val} strip={strip_bgr.shape}, search_start={search_start}, template={template.shape}")
 
     if template.shape[0] > search_region.shape[0] or template.shape[1] > search_region.shape[1]:
         return jsonify({'error': 'Anchor image is larger than search region'}), 400
@@ -225,7 +225,7 @@ def detect_y():
     if max_val < 0.7:
         return jsonify({'found': False, 'score': round(float(max_val), 3)})
 
-    anchor_y = max_loc[1] + half_y
+    anchor_y = max_loc[1] + search_start
     y_top = int(np.clip(anchor_y + y_offset, 0, strip_h - FIXED_HEIGHT))
     return jsonify({'found': True, 'y_top': y_top, 'score': round(float(max_val), 3)})
 
