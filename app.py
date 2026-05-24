@@ -1,9 +1,10 @@
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from PIL import Image
-import os, uuid, io, base64
+import os, uuid, io, base64, json
 import numpy as np
 import cv2
-from concurrent.futures import ThreadPoolExecutor
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor
 
 app = Flask(__name__)
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
@@ -12,7 +13,6 @@ SORT_TAGS_FOLDER = os.path.join(os.path.dirname(__file__), 'sort_tags')
 ANCHOR_FOLDER = os.path.join(os.path.dirname(__file__), 'anchor')
 SPECIAL_TAGS_FOLDER = os.path.join(os.path.dirname(__file__), 'special_tags')
 
-# 確保所有必要資料夾都存在
 for folder in [UPLOAD_FOLDER, TAGS_FOLDER, SORT_TAGS_FOLDER, ANCHOR_FOLDER, SPECIAL_TAGS_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
@@ -21,16 +21,62 @@ app.config['TAGS_FOLDER'] = TAGS_FOLDER
 app.config['SORT_TAGS_FOLDER'] = SORT_TAGS_FOLDER
 app.config['ANCHOR_FOLDER'] = ANCHOR_FOLDER
 app.config['SPECIAL_TAGS_FOLDER'] = SPECIAL_TAGS_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 80 * 1024 * 1024
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+SORT_TAGS_NAMES_FILE = os.path.join(os.path.dirname(__file__), 'sort_tags_names.json')
+
+def _load_tag_names():
+    try:
+        with open(SORT_TAGS_NAMES_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_tag_names(names):
+    with open(SORT_TAGS_NAMES_FILE, 'w', encoding='utf-8') as f:
+        json.dump(names, f, ensure_ascii=False, indent=2)
+
+WIDTH_CONFIGS = {
+    2048: {
+        'BOXES_X': [[512, 755], [768, 1011], [1024, 1267], [1281, 1523], [1537, 1780]],
+        'FIXED_HEIGHT': 440,
+    },
+    2532: {
+        'BOXES_X': [[632, 930], [950, 1249], [1268, 1567], [1586, 1885], [1904, 2203]],
+        'FIXED_HEIGHT': 548,
+    },
+    2556: {
+        'BOXES_X': [[639, 940], [958, 1261], [1280, 1581], [1600, 1901], [1921, 2223]],
+        'FIXED_HEIGHT': 551,
+    },
+    2622: {
+        'BOXES_X': [[657, 965], [985, 1294], [1313, 1621], [1641, 1949], [1969, 2278]],
+        'FIXED_HEIGHT': 557,
+    },
+}
+
+def get_config(width_val):
+    try:
+        w = int(width_val)
+    except (TypeError, ValueError):
+        w = 2556
+    return WIDTH_CONFIGS.get(w, WIDTH_CONFIGS[2556])
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.errorhandler(413)
+def request_entity_too_large(e):
+    return jsonify({'error': '檔案過大，單次上傳上限為 80MB'}), 413
 
 def cv_imread_unicode(file_path):
-    """支援中文路徑與檔名的 OpenCV 讀取方式"""
     try:
         return cv2.imdecode(np.fromfile(file_path, dtype=np.uint8), cv2.IMREAD_COLOR)
     except Exception as e:
         print(f"讀取圖檔失敗 ({file_path}): {e}")
         return None
 
-# 模板快取：啟動時一次性載入，避免每次請求都讀磁碟
 _template_cache = {'filter': [], 'weight': []}
 
 def _load_templates_from_folder(folder, is_filter=False):
@@ -51,7 +97,6 @@ def _load_templates_from_folder(folder, is_filter=False):
     return results
 
 def reload_templates():
-    """重新載入所有資料夾的模板（新增/修改標籤後呼叫）"""
     _template_cache['filter'] = _load_templates_from_folder(TAGS_FOLDER, is_filter=True)
     _template_cache['weight'] = (
         _load_templates_from_folder(SORT_TAGS_FOLDER) +
@@ -61,19 +106,18 @@ def reload_templates():
 
 reload_templates()
 
-# 模組層級 executor，避免每次請求重建執行緒池
-_executor = ThreadPoolExecutor(max_workers=4)
+def _worker_init():
+    reload_templates()
 
-# 定義裁切座標與高度
-BOXES_X = [[468, 692], [705, 929], [941, 1166], [1178, 1402], [1414, 1638]]
-FIXED_HEIGHT = 409
+if multiprocessing.current_process().name == 'MainProcess':
+    _executor = ProcessPoolExecutor(
+        max_workers=os.cpu_count() or 4,
+        initializer=_worker_init
+    )
+else:
+    _executor = None
 
 def get_matching_info(roi):
-    """
-    使用快取模板進行過濾檢查與權重計算。
-    接收已裁切好的 BGR ROI，回傳: (是否應過濾, 權重分數)
-    """
-    # 1. 過濾檢查 (filter_tags)
     for tag_name, template, _ in _template_cache['filter']:
         if template.shape[0] > roi.shape[0] or template.shape[1] > roi.shape[1]:
             continue
@@ -82,7 +126,6 @@ def get_matching_info(roi):
             print(f"命中過濾標籤: {tag_name} ({max_val:.2f})")
             return True, 0
 
-    # 2. 計算權重分數 (sort_tags + special_tags 合併)
     max_weight = 0
     for _, template, weight in _template_cache['weight']:
         if template.shape[0] > roi.shape[0] or template.shape[1] > roi.shape[1]:
@@ -95,64 +138,85 @@ def get_matching_info(roi):
 
 @app.route('/reload_templates', methods=['POST'])
 def reload_templates_route():
-    """新增/修改標籤後呼叫此路由，重新載入模板快取"""
     reload_templates()
     return jsonify({'filter': len(_template_cache['filter']), 'weight': len(_template_cache['weight'])})
 
 @app.route('/')
 def index():
-    return render_template('index-1882.html')
+    return render_template('index.html')
 
 @app.route('/image/<filename>')
 def serve_image(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
+@app.route('/sort_tags_list', methods=['GET'])
+def sort_tags_list():
+    names = _load_tag_names()
+    tags = []
+    for fname, _, weight in _template_cache['weight']:
+        if not os.path.exists(os.path.join(SORT_TAGS_FOLDER, fname)):
+            continue
+        default_name = fname.rsplit('_', 1)[0]
+        tags.append({'filename': fname, 'name': names.get(fname, default_name), 'weight': weight})
+    tags.sort(key=lambda x: (-x['weight'], x['name']))
+    return jsonify({'tags': tags})
+
+@app.route('/sort_tag_rename', methods=['POST'])
+def sort_tag_rename():
+    data = request.json or {}
+    filename = os.path.basename(data.get('filename', '').strip())
+    new_name = data.get('name', '').strip()
+    if not filename or not new_name:
+        return jsonify({'error': 'Missing fields'}), 400
+    if not os.path.exists(os.path.join(SORT_TAGS_FOLDER, filename)):
+        return jsonify({'error': 'File not found'}), 404
+    names = _load_tag_names()
+    names[filename] = new_name
+    _save_tag_names(names)
+    return jsonify({'ok': True})
+
 @app.route('/upload_anchor', methods=['POST'])
 def upload_anchor():
-    """儲存錨點圖片，供 detect_y 做 template matching 用"""
     f = request.files.get('anchor')
     if not f: return jsonify({'error': 'No file'}), 400
-    anchor_path = os.path.join(app.config['ANCHOR_FOLDER'], 'anchor.png')
+    if not allowed_file(f.filename): return jsonify({'error': '僅支援 PNG / JPG / JPEG / WEBP'}), 400
+    width_val = int(request.form.get('width', 2556))
+    anchor_path = os.path.join(app.config['ANCHOR_FOLDER'], f'anchor-{width_val}.png')
     Image.open(f).convert('RGB').save(anchor_path)
     return jsonify({'ok': True})
 
 @app.route('/detect_y', methods=['POST'])
 def detect_y():
-    """
-    在 strip 圖中尋找錨點，回傳對齊後的 y_top。
-    y_top = 錨點頂部 Y + y_offset
-    """
     f = request.files.get('strip')
     y_offset = int(request.form.get('y_offset', 0))
+    cfg = get_config(request.form.get('width'))
+    FIXED_HEIGHT = cfg['FIXED_HEIGHT']
+    width_val = int(request.form.get('width', 2556))
+
     if not f:
-        print("[detect_y] 400: No file")
         return jsonify({'error': 'No file'}), 400
 
-    anchor_path = os.path.join(app.config['ANCHOR_FOLDER'], 'anchor.png')
+    anchor_path = os.path.join(app.config['ANCHOR_FOLDER'], f'anchor-{width_val}.png')
     if not os.path.exists(anchor_path):
-        print("[detect_y] 400: anchor.png not found at", anchor_path)
+        print(f"[detect_y] 400: anchor-{width_val}.png not found at", anchor_path)
         return jsonify({'error': 'No anchor uploaded'}), 400
 
-    # 讀取 strip（來自記憶體流，不存檔）
     img_data = np.frombuffer(f.read(), dtype=np.uint8)
     strip_bgr = cv2.imdecode(img_data, cv2.IMREAD_COLOR)
     if strip_bgr is None:
-        print("[detect_y] 400: Cannot decode strip image")
         return jsonify({'error': 'Cannot decode strip image'}), 400
 
     template = cv_imread_unicode(anchor_path)
     if template is None:
-        print("[detect_y] 400: Cannot read anchor.png")
         return jsonify({'error': 'Cannot read anchor'}), 400
 
     strip_h = strip_bgr.shape[0]
     half_y = strip_h // 2
     search_region = strip_bgr[half_y:, :]
 
-    print(f"[detect_y] strip={strip_bgr.shape}, half_y={half_y}, search_region={search_region.shape}, template={template.shape}")
+    print(f"[detect_y] width={width_val} strip={strip_bgr.shape}, half_y={half_y}, template={template.shape}")
 
     if template.shape[0] > search_region.shape[0] or template.shape[1] > search_region.shape[1]:
-        print(f"[detect_y] 400: Anchor ({template.shape}) larger than search region ({search_region.shape})")
         return jsonify({'error': 'Anchor image is larger than search region'}), 400
 
     res = cv2.matchTemplate(search_region, template, cv2.TM_CCOEFF_NORMED)
@@ -161,7 +225,6 @@ def detect_y():
     if max_val < 0.7:
         return jsonify({'found': False, 'score': round(float(max_val), 3)})
 
-    # max_loc[1] 是相對於下半部的 Y，加回 half_y 換算成全圖座標
     anchor_y = max_loc[1] + half_y
     y_top = int(np.clip(anchor_y + y_offset, 0, strip_h - FIXED_HEIGHT))
     return jsonify({'found': True, 'y_top': y_top, 'score': round(float(max_val), 3)})
@@ -170,15 +233,16 @@ def detect_y():
 def upload_cover():
     f = request.files.get('cover')
     if not f: return jsonify({'error': 'No file'}), 400
+    if not allowed_file(f.filename): return jsonify({'error': '僅支援 PNG / JPG / JPEG / WEBP'}), 400
     fname = f'cover_{uuid.uuid4().hex}.png'
     f.save(os.path.join(app.config['UPLOAD_FOLDER'], fname))
     return jsonify({'filename': fname})
 
 def _process_piece(args):
-    """裁切單一格並進行過濾/權重比對，供多執行緒呼叫。"""
-    img, i, x1, x2, y_top, strip_id, upload_folder = args
-    piece = img.crop((x1, y_top, x2, y_top + FIXED_HEIGHT))
-    # 在這裡做一次 PIL→BGR+ROI 轉換，傳給 get_matching_info
+    raw_bytes, i, x1, x2, y_top, strip_id, upload_folder, fixed_height = args
+    import io as _io
+    img = Image.open(_io.BytesIO(raw_bytes)).convert('RGBA')
+    piece = img.crop((x1, y_top, x2, y_top + fixed_height))
     bgr = cv2.cvtColor(np.array(piece.convert('RGB')), cv2.COLOR_RGB2BGR)
     w = bgr.shape[1]
     roi = bgr[0:130, int(w * 0.4):w]
@@ -194,19 +258,22 @@ def upload_strip():
     f = request.files.get('strip')
     y_top = int(request.form.get('y_top', 0))
     if not f: return jsonify({'error': 'No file'}), 400
+    if not allowed_file(f.filename): return jsonify({'error': '僅支援 PNG / JPG / JPEG / WEBP'}), 400
+
+    cfg = get_config(request.form.get('width'))
+    BOXES_X = cfg['BOXES_X']
+    FIXED_HEIGHT = cfg['FIXED_HEIGHT']
 
     strip_id = uuid.uuid4().hex
-    img = Image.open(f).convert('RGBA')
+    raw_bytes = f.read()
     upload_folder = app.config['UPLOAD_FOLDER']
 
     args_list = [
-        (img, i, x1, x2, y_top, strip_id, upload_folder)
+        (raw_bytes, i, x1, x2, y_top, strip_id, upload_folder, FIXED_HEIGHT)
         for i, (x1, x2) in enumerate(BOXES_X)
     ]
 
     raw = list(_executor.map(_process_piece, args_list))
-
-    # 過濾掉被捨棄的格（None），並保留原始欄位順序
     results = [r for r in raw if r is not None]
     return jsonify({'pieces': results})
 
@@ -217,6 +284,10 @@ def generate():
     cells = data.get('cells', [])
     rows = int(data.get('grid_rows', 1))
     cols = int(data.get('grid_cols', 5))
+
+    cfg = get_config(data.get('width'))
+    BOXES_X = cfg['BOXES_X']
+    FIXED_HEIGHT = cfg['FIXED_HEIGHT']
 
     output_width = 3000
     cell_w = output_width // cols
@@ -256,11 +327,11 @@ def generate():
         current_y += img.height
 
     out_io = io.BytesIO()
-    final.convert('RGB').save(out_io, 'JPEG', quality=92, subsampling=0)
+    final.convert('RGB').save(out_io, 'JPEG', quality=100, subsampling=0)
     b64 = base64.b64encode(out_io.getvalue()).decode()
 
     return jsonify({'preview': b64})
 
 if __name__ == '__main__':
     print("伺服器已啟動，請確認資料夾路徑是否有中文...")
-    app.run(debug=False, port=5001)
+    app.run(debug=False, port=5000)

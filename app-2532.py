@@ -65,7 +65,7 @@ reload_templates()
 _executor = ThreadPoolExecutor(max_workers=4)
 
 # 定義裁切座標與高度
-BOXES_X = [[632, 930], [950, 1249], [1268, 1576], [1586, 1885], [1904, 2203]]
+BOXES_X = [[632, 930], [950, 1249], [1268, 1567], [1586, 1885], [1904, 2203]]
 FIXED_HEIGHT = 548
 
 def get_matching_info(roi):
@@ -263,4 +263,4 @@ def generate():
 
 if __name__ == '__main__':
     print("伺服器已啟動，請確認資料夾路徑是否有中文...")
-    app.run(debug=False, port=5001)
+    app.run(debug=False, port=2532)

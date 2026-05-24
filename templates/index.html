@@ -70,6 +70,20 @@ body {
 .header-logo svg { display: block; }
 .brand  { font-size: 16px; font-weight: 700; color: var(--text-1); letter-spacing: 0.3px; }
 .ver    { font-size: 10px; color: var(--text-3); background: var(--surface-3); border: 1px solid var(--border-hi); padding: 2px 9px; border-radius: 99px; }
+#width-select {
+  background: var(--surface-3);
+  border: 1px solid var(--border-hi);
+  color: var(--text-1);
+  font-family: 'Noto Sans TC', sans-serif;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  outline: none;
+  margin-left: 4px;
+}
+#width-select:focus { border-color: var(--accent); }
+/* gradient accent line */
 .header-line {
   position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
   background: linear-gradient(90deg, transparent 5%, var(--accent) 40%, var(--purple) 60%, transparent 95%);
@@ -392,6 +406,7 @@ label.upload-zone { touch-action: manipulation; -webkit-tap-highlight-color: tra
 
   .row { gap: 6px; }
 
+  /* Prevent iOS from zooming on input focus */
   input[type=number] { font-size: 16px; min-height: 44px; }
 
   .upload-zone { padding: 16px 10px; min-width: 0; }
@@ -406,6 +421,39 @@ label.upload-zone { touch-action: manipulation; -webkit-tap-highlight-color: tra
 
   .bank { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* ══════════════════════════════
+   SORT TAGS BAR
+══════════════════════════════ */
+.sort-tags-bar {
+  display: flex; align-items: center; gap: 6px;
+  overflow-x: auto; padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.sort-tags-bar::-webkit-scrollbar { display: none; }
+.stc {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px;
+  border-radius: 99px;
+  border: 1.5px solid var(--border-hi);
+  background: var(--surface-2);
+  cursor: pointer; user-select: none; flex-shrink: 0;
+  font-size: 12px; font-weight: 500; color: var(--text-2);
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.stc:hover { border-color: var(--accent); color: var(--text-1); }
+.stc.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
+.stc.drag-over { border-color: var(--purple) !important; background: var(--purple-dim) !important; color: var(--purple) !important; }
+.stc-count {
+  font-size: 10px; font-weight: 700;
+  background: rgba(255,255,255,0.08); border-radius: 99px;
+  padding: 1px 6px; color: var(--text-3);
+}
+.stc.active .stc-count { background: rgba(34,211,238,0.15); color: var(--accent); }
+.stc-name { outline: none; }
+.stc-name:focus { border-bottom: 1px dashed currentColor; }
 </style>
 </head>
 <body>
@@ -419,7 +467,13 @@ label.upload-zone { touch-action: manipulation; -webkit-tap-highlight-color: tra
     </svg>
   </div>
   <span class="brand">造型製圖工具</span>
-  <span class="ver">v2532</span>
+  <span class="ver" id="ver-badge">v2556</span>
+  <select id="width-select" onchange="switchWidth(this.value)">
+    <option value="2048">2048px</option>
+    <option value="2532">2532px</option>
+    <option value="2556" selected>2556px</option>
+    <option value="2622">2622px</option>
+  </select>
   <div class="header-line"></div>
 </header>
 
@@ -499,6 +553,7 @@ label.upload-zone { touch-action: manipulation; -webkit-tap-highlight-color: tra
     </div>
     <div class="card-body">
 
+      <!-- Upload zone + nav -->
       <div class="row" style="align-items:stretch;">
         <label class="upload-zone" id="strip-zone" for="strip-input" style="flex:1; min-width:0;">
           <div class="uz-icon">
@@ -535,7 +590,7 @@ label.upload-zone { touch-action: manipulation; -webkit-tap-highlight-color: tra
       <div class="sub-label">錨點自動定位</div>
       <div class="row">
         <span style="color:var(--text-3); font-size:12px;">Y 偏移</span>
-        <input type="number" id="y-offset" value="-480" style="width:84px" title="錨點頂部 + 此值 = y_top，正數往下、負數往上">
+        <input type="number" id="y-offset" value="-481" style="width:84px" title="錨點頂部 + 此值 = y_top，正數往下、負數往上">
         <button class="btn-primary" id="detect-btn" onclick="autoDetectY()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           自動定位全部
@@ -553,13 +608,14 @@ label.upload-zone { touch-action: manipulation; -webkit-tap-highlight-color: tra
       <div class="ci ci-cyan">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       </div>
-      <span class="card-title">造型資源庫</span>
+      <span class="card-title">造型資源庫(拖曳排序)</span>
       <div class="bank-stats">
         <div>總計 <span id="stat-total">0</span></div>
         <div>已用 <span id="stat-used">0</span></div>
         <div>剩餘 <span id="stat-avail">0</span></div>
       </div>
     </div>
+    <div id="sort-tags-bar" class="sort-tags-bar" style="display:none;"></div>
     <div class="card-body" style="padding-top:12px;">
       <div class="bank" id="bank">
         <div class="bank-empty">尚無造型，請先完成切割步驟</div>
@@ -622,8 +678,28 @@ label.upload-zone { touch-action: manipulation; -webkit-tap-highlight-color: tra
 <!-- ══ SCRIPT ══ -->
 <script>
 let images = [], cur = 0, cells = [], allPieces = [], dragSrc = null, coverFile = null;
-const FIXED_H = 548;
-const BOXES_X = [[632, 930], [950, 1249], [1268, 1567], [1586, 1885], [1904, 2203]];
+let sortTagOrder = [], activeTagFilter = null, _stcDragIdx = null;
+
+const WIDTH_CONFIGS = {
+    2048: { FIXED_H: 440, BOXES_X: [[512,755],[768,1011],[1024,1267],[1281,1523],[1537,1780]], y_offset: -494 },
+    2532: { FIXED_H: 548, BOXES_X: [[632,930],[950,1249],[1268,1567],[1586,1885],[1904,2203]], y_offset: -480 },
+    2556: { FIXED_H: 551, BOXES_X: [[639,940],[958,1261],[1280,1581],[1600,1901],[1921,2223]], y_offset: -481 },
+    2622: { FIXED_H: 565, BOXES_X: [[657,965],[985,1294],[1313,1621],[1641,1949],[1969,2278]], y_offset: -495 },
+};
+let selectedWidth = 2556;
+let FIXED_H = WIDTH_CONFIGS[2556].FIXED_H;
+let BOXES_X = WIDTH_CONFIGS[2556].BOXES_X;
+
+function switchWidth(w) {
+    selectedWidth = parseInt(w);
+    const cfg = WIDTH_CONFIGS[selectedWidth];
+    FIXED_H = cfg.FIXED_H;
+    BOXES_X = cfg.BOXES_X;
+    document.getElementById('y-offset').value = cfg.y_offset;
+    document.getElementById('ver-badge').innerText = 'v' + selectedWidth;
+    if (images[cur]) draw();
+}
+
 const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
 
 // ── Toast ──
@@ -690,6 +766,136 @@ const SVG_SCISSORS = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none
 const SVG_SEARCH   = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
 const SVG_BOLT     = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
 
+// ── Sort Tags ──
+async function loadSortTags() {
+    try {
+        const data = await (await fetch('/sort_tags_list')).json();
+        sortTagOrder = data.tags;
+    } catch(e) { sortTagOrder = []; }
+    renderSortTags();
+}
+
+function renderSortTags() {
+    const bar = document.getElementById('sort-tags-bar');
+    if (!bar) return;
+    bar.innerHTML = '';
+    if (!sortTagOrder.length) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+
+    const wCount = {};
+    allPieces.forEach(fn => {
+        const m = fn.match(/^w(\d+)_/);
+        const w = m ? parseInt(m[1]) : 0;
+        wCount[w] = (wCount[w] || 0) + 1;
+    });
+
+    // "全部" chip
+    const allChip = document.createElement('div');
+    allChip.className = 'stc' + (activeTagFilter === null ? ' active' : '');
+    allChip.innerHTML = `<span>全部</span>`;
+    allChip.title = '顯示全部';
+    allChip.onclick = () => { activeTagFilter = null; renderAll(); renderSortTags(); };
+    bar.appendChild(allChip);
+
+    sortTagOrder.forEach((tag, idx) => {
+        const cnt = wCount[tag.weight] || 0;
+        const chip = document.createElement('div');
+        chip.className = 'stc' + (activeTagFilter === tag.weight && activeTagFilter !== null ? ' active' : '');
+        chip.draggable = true;
+        chip.innerHTML = `<span class="stc-name">${tag.name}</span>${cnt > 0 ? `<span class="stc-count">${cnt}</span>` : ''}`;
+        chip.title = '雙擊重新命名・拖曳調整順序';
+
+        const nameEl = chip.querySelector('.stc-name');
+
+        nameEl.ondblclick = e => {
+            e.stopPropagation();
+            chip.draggable = false;
+            nameEl.contentEditable = 'true';
+            nameEl.focus();
+            document.execCommand('selectAll', false, null);
+        };
+        nameEl.onblur = async () => {
+            nameEl.contentEditable = 'false';
+            chip.draggable = true;
+            const newName = nameEl.innerText.trim();
+            if (!newName) { nameEl.innerText = tag.name; return; }
+            if (newName === tag.name) return;
+            tag.name = newName;
+            sortTagOrder[idx].name = newName;
+            await fetch('/sort_tag_rename', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: tag.filename, name: newName })
+            });
+            showToast(`已儲存名稱「${newName}」`, 'ok');
+        };
+        nameEl.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); } };
+        nameEl.onclick = e => e.stopPropagation();
+
+        chip.onclick = e => {
+            if (nameEl.contentEditable === 'true') return;
+            activeTagFilter = (activeTagFilter === tag.weight) ? null : tag.weight;
+            renderAll(); renderSortTags();
+        };
+        chip.ondragstart = e => {
+            _stcDragIdx = idx;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('stc-idx', String(idx));
+            e.dataTransfer.setData('text', '');
+            chip.style.opacity = '0.45';
+        };
+        chip.ondragend = () => {
+            chip.style.opacity = '';
+            _stcDragIdx = null;
+            bar.querySelectorAll('.stc').forEach(c => c.classList.remove('drag-over'));
+        };
+        chip.ondragover = e => {
+            if (e.dataTransfer.types.includes('stc-idx')) { e.preventDefault(); chip.classList.add('drag-over'); }
+        };
+        chip.ondragleave = () => chip.classList.remove('drag-over');
+        chip.ondrop = e => {
+            e.stopPropagation(); e.preventDefault();
+            chip.classList.remove('drag-over');
+            const fromIdx = parseInt(e.dataTransfer.getData('stc-idx'));
+            if (isNaN(fromIdx) || fromIdx === idx) return;
+            const [moved] = sortTagOrder.splice(fromIdx, 1);
+            sortTagOrder.splice(idx, 0, moved);
+            renderAll(); renderSortTags();
+        };
+        bar.appendChild(chip);
+    });
+
+    // "未分類" chip
+    const totalUntagged = wCount[0] || 0;
+    if (totalUntagged > 0) {
+        const noChip = document.createElement('div');
+        noChip.className = 'stc' + (activeTagFilter === 0 ? ' active' : '');
+        noChip.innerHTML = `<span>未分類</span><span class="stc-count">${totalUntagged}</span>`;
+        noChip.onclick = () => { activeTagFilter = (activeTagFilter === 0) ? null : 0; renderAll(); renderSortTags(); };
+        bar.appendChild(noChip);
+    }
+}
+
+function getPiecesOrdered() {
+    const getW = fn => { const m = fn.match(/^w(\d+)_/); return m ? parseInt(m[1]) : 0; };
+    if (activeTagFilter !== null) {
+        return [...allPieces].filter(fn => getW(fn) === activeTagFilter);
+    }
+    if (!sortTagOrder.length) return [...allPieces].sort().reverse();
+    const wOrder = sortTagOrder.map(t => t.weight);
+    return [...allPieces].sort((a, b) => {
+        const wa = getW(a), wb = getW(b);
+        if (wa === wb) return a > b ? -1 : 1;
+        if (wa === 0) return 1;
+        if (wb === 0) return -1;
+        const ia = wOrder.indexOf(wa), ib = wOrder.indexOf(wb);
+        if (ia === -1 && ib === -1) return 0;
+        if (ia === -1) return 1;
+        if (ib === -1) return -1;
+        return ia - ib;
+    });
+}
+
 // ── Auto-detect Y ──
 async function autoDetectY() {
     if (!images.length) { showToast('請先載入條圖', 'warn'); return; }
@@ -702,6 +908,7 @@ async function autoDetectY() {
         btn.innerHTML = `${SVG_SEARCH} 偵測中 ${i + 1} / ${images.length}...`;
         const fd = new FormData();
         fd.append('strip', images[i].f); fd.append('y_offset', offset);
+        fd.append('width', selectedWidth);
         const data = await (await fetch('/detect_y', { method: 'POST', body: fd })).json();
         if (data.found) { images[i].y = data.y_top; ok++; } else { fail++; }
     }
@@ -771,12 +978,14 @@ async function cutAll() {
         btn.innerHTML = `${SVG_SCISSORS} 切割中 ${i + 1} / ${images.length}...`;
         const fd = new FormData();
         fd.append('strip', images[i].f); fd.append('y_top', Math.round(images[i].y));
+        fd.append('width', selectedWidth);
         const data = await (await fetch('/upload_strip', { method: 'POST', body: fd })).json();
         if (data.pieces) data.pieces.forEach(p => { if (!allPieces.includes(p)) { allPieces.push(p); newCount++; } });
     }
     btn.disabled = false;
     btn.innerHTML = `${SVG_SCISSORS} 開始切割並過濾`;
     renderAll();
+    renderSortTags();
     showToast(`切割完成，新增 ${newCount} 個造型，共 ${allPieces.length} 個`, 'ok');
     setStepDone(3); setStepDone(4);
 }
@@ -822,7 +1031,7 @@ function renderAll() {
         bank.innerHTML = '<div class="bank-empty">尚無造型，請先完成切割步驟</div>';
         return;
     }
-    [...allPieces].sort().reverse().forEach(fn => {
+    getPiecesOrdered().forEach(fn => {
         const img = document.createElement('img');
         img.src = `/image/${fn}`;
         const isUsed = cells.includes(fn);
@@ -853,7 +1062,7 @@ function addToCell(fn, targetIdx) {
 }
 
 function autoFill() {
-    const available = [...allPieces].sort().reverse().filter(fn => !cells.includes(fn));
+    const available = getPiecesOrdered().filter(fn => !cells.includes(fn));
     let ai = 0;
     for (let i = 0; i < cells.length; i++) {
         if (!cells[i] && ai < available.length) cells[i] = available[ai++];
@@ -871,7 +1080,7 @@ async function generate() {
     const data = await (await fetch('/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cover: coverFile, cells, grid_rows: document.getElementById('rows').value, grid_cols: document.getElementById('cols').value })
+        body: JSON.stringify({ cover: coverFile, cells, grid_rows: document.getElementById('rows').value, grid_cols: document.getElementById('cols').value, width: selectedWidth })
     })).json();
     btn.disabled = false;
     btn.innerHTML = `${SVG_BOLT} 生成圖片`;
@@ -888,7 +1097,7 @@ async function generate() {
 
 // ── Project I/O ──
 function exportProject() {
-    const data = { coverFile, allPieces, cells, rows: document.getElementById('rows').value, cols: document.getElementById('cols').value };
+    const data = { coverFile, allPieces, cells, rows: document.getElementById('rows').value, cols: document.getElementById('cols').value, width: selectedWidth };
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
     a.download = `project_${Date.now()}.json`; a.click();
@@ -903,6 +1112,10 @@ function importProject(input) {
             coverFile = data.coverFile; allPieces = data.allPieces || []; cells = data.cells || [];
             document.getElementById('rows').value = data.rows;
             document.getElementById('cols').value = data.cols;
+            if (data.width && WIDTH_CONFIGS[data.width]) {
+                document.getElementById('width-select').value = data.width;
+                switchWidth(data.width);
+            }
             renderAll(); showToast('專案紀錄已匯入', 'ok');
         } catch { showToast('匯入失敗，檔案格式錯誤', 'err'); }
     };
@@ -954,7 +1167,7 @@ function changeImg(s) { cur = (cur + s + images.length) % images.length; showImg
     function cancel() {
         if (!td) return;
         clearTimeout(td.timer);
-        if (td._bi) { td._bi.classList.remove('td-src'); }
+        if (td._bi) td._bi.classList.remove('td-src');
         if (td.g) td.g.remove();
         clearHL();
         td = null;
@@ -966,7 +1179,6 @@ function changeImg(s) { cur = (cur + s + images.length) % images.length; showImg
         const el = document.elementFromPoint(t.clientX, t.clientY);
         if (!el) return;
 
-        // Bank image — long press (160ms) to activate drag
         const bi = el.closest('#bank img');
         if (bi && !bi.classList.contains('used')) {
             const fn = bi.getAttribute('src').replace('/image/', '');
@@ -1021,7 +1233,6 @@ function changeImg(s) { cur = (cur + s + images.length) % images.length; showImg
         }
 
         if (!td.g) {
-            // Cell drag: create ghost after movement threshold
             if (dist < 6) return;
             const cell = document.querySelector('.cell[data-index="' + td.idx + '"]');
             if (!cell) { cancel(); return; }
@@ -1065,6 +1276,7 @@ function changeImg(s) { cur = (cur + s + images.length) % images.length; showImg
 })();
 
 initGrid();
+loadSortTags();
 </script>
 </body>
 </html>
