@@ -1,3 +1,5 @@
+import time
+
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from PIL import Image
 import os, uuid, io, base64, json
@@ -123,7 +125,9 @@ def get_matching_info(roi):
             continue
         _, max_val, _, _ = cv2.minMaxLoc(cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED))
         if max_val > 0.9:
-            print(f"命中過濾標籤: {tag_name} ({max_val:.2f})")
+            current_local_time = time.localtime()
+            ntime = time.strftime("%Y-%m-%d %H:%M:%S", current_local_time)
+            print(f"{ntime} filter_tag: {tag_name} ({max_val:.2f})")
             return True, 0
 
     max_weight = 0
@@ -213,8 +217,9 @@ def detect_y():
     strip_h = strip_bgr.shape[0]
     search_start = strip_h // 3
     search_region = strip_bgr[search_start:, :]
-
-    print(f"[detect_y] width={width_val} strip={strip_bgr.shape}, search_start={search_start}, template={template.shape}")
+    current_local_time = time.localtime()
+    ntime = time.strftime("%Y-%m-%d %H:%M:%S", current_local_time)
+    print(f"{ntime} [detect_y] width={width_val} strip={strip_bgr.shape}, search_start={search_start}, template={template.shape}")
 
     if template.shape[0] > search_region.shape[0] or template.shape[1] > search_region.shape[1]:
         return jsonify({'error': 'Anchor image is larger than search region'}), 400

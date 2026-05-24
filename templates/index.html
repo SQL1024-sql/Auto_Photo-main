@@ -590,7 +590,7 @@ label.upload-zone { touch-action: manipulation; -webkit-tap-highlight-color: tra
       <div class="sub-label">錨點自動定位</div>
       <div class="row">
         <span style="color:var(--text-3); font-size:12px;">Y 偏移</span>
-        <input type="number" id="y-offset" value="-481" style="width:84px" title="錨點頂部 + 此值 = y_top，正數往下、負數往上">
+        <input type="number" id="y-offset" value="-494" style="width:84px" title="錨點頂部 + 此值 = y_top，正數往下、負數往上">
         <button class="btn-primary" id="detect-btn" onclick="autoDetectY()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           自動定位全部
@@ -683,7 +683,7 @@ let sortTagOrder = [], activeTagFilter = null, _stcDragIdx = null;
 const WIDTH_CONFIGS = {
     2048: { FIXED_H: 440, BOXES_X: [[512,755],[768,1011],[1024,1267],[1281,1523],[1537,1780]], y_offset: -494 },
     2532: { FIXED_H: 548, BOXES_X: [[632,930],[950,1249],[1268,1567],[1586,1885],[1904,2203]], y_offset: -480 },
-    2556: { FIXED_H: 551, BOXES_X: [[639,940],[958,1261],[1280,1581],[1600,1901],[1921,2223]], y_offset: -481 },
+    2556: { FIXED_H: 551, BOXES_X: [[639,940],[958,1261],[1280,1581],[1600,1901],[1921,2223]], y_offset: -494 },
     2622: { FIXED_H: 565, BOXES_X: [[657,965],[985,1294],[1313,1621],[1641,1949],[1969,2278]], y_offset: -495 },
 };
 let selectedWidth = 2556;
