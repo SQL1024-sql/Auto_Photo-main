@@ -320,7 +320,7 @@ canvas {
    GRID
 ══════════════════════════════ */
 .grid-container {
-  display: grid; gap: 6px; padding: 12px;
+  display: grid; gap: 12px; padding: 12px;
   width: fit-content;
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -681,10 +681,10 @@ let images = [], cur = 0, cells = [], allPieces = [], dragSrc = null, coverFile 
 let sortTagOrder = [], activeTagFilter = null, _stcDragIdx = null;
 
 const WIDTH_CONFIGS = {
-    2048: { FIXED_H: 440, BOXES_X: [[512,755],[768,1011],[1024,1267],[1281,1523],[1537,1780]], y_offset: -494 },
+    2048: { FIXED_H: 440, BOXES_X: [[511,752],[768,1010],[1026,1267],[1283,1524],[1540,1782]], y_offset: -397 },
     2532: { FIXED_H: 548, BOXES_X: [[632,930],[950,1249],[1268,1567],[1586,1885],[1904,2203]], y_offset: -480 },
-    2556: { FIXED_H: 551, BOXES_X: [[639,940],[958,1261],[1280,1581],[1600,1901],[1921,2223]], y_offset: -494 },
-    2622: { FIXED_H: 565, BOXES_X: [[657,965],[985,1294],[1313,1621],[1641,1949],[1969,2278]], y_offset: -495 },
+    2556: { FIXED_H: 551, BOXES_X: [[640,939],[960,1259],[1281,1580],[1601,1900],[1922,2221]], y_offset: -494 },
+    2622: { FIXED_H: 557, BOXES_X: [[657,965],[985,1294],[1313,1621],[1641,1949],[1969,2278]], y_offset: -495 },
 };
 let selectedWidth = 2556;
 let FIXED_H = WIDTH_CONFIGS[2556].FIXED_H;
@@ -1277,6 +1277,7 @@ function changeImg(s) { cur = (cur + s + images.length) % images.length; showImg
 
 initGrid();
 loadSortTags();
+
 </script>
 </body>
 </html>

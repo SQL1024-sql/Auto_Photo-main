@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理後台</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0d0d0d; color: #d4d4d4; font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+    header {
+      background: #111;
+      border-bottom: 1px solid #222;
+      padding: 14px 32px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      position: sticky; top: 0; z-index: 10;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; flex-shrink: 0; }
+    header h1 { font-size: 16px; color: #fff; font-weight: 600; flex: 1; }
+    .status-badge {
+      font-size: 12px; padding: 3px 10px; border-radius: 20px;
+      font-weight: 500; transition: all 0.3s;
+    }
+    .status-open     { background: #14532d; color: #4ade80; }
+    .status-restricted { background: #7c2d12; color: #fb923c; }
+
+    main { padding: 24px 32px; max-width: 1300px; margin: 0 auto; }
+
+    .card {
+      background: #161616;
+      border: 1px solid #222;
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 11px; font-weight: 700; color: #555;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      margin-bottom: 16px; padding-bottom: 12px;
+      border-bottom: 1px solid #222;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+
+    /* Toggle */
+    .toggle-group { display: flex; border: 1px solid #2a2a2a; border-radius: 8px; overflow: hidden; width: fit-content; }
+    .toggle-btn {
+      padding: 9px 22px; cursor: pointer; font-size: 14px;
+      border: none; background: transparent; color: #777; transition: all 0.2s;
+    }
+    .toggle-btn.active   { background: #1d4ed8; color: #fff; }
+    .toggle-btn:not(.active):hover { background: #1a1a1a; color: #ccc; }
+
+    /* IP list */
+    .ip-section { margin-top: 16px; display: none; }
+    .ip-section.visible { display: block; }
+    .section-label { font-size: 12px; color: #666; margin-bottom: 8px; }
+    .ip-tags { display: flex; flex-wrap: wrap; gap: 7px; min-height: 28px; margin-bottom: 10px; }
+    .ip-tag {
+      background: #1e3a5f; border: 1px solid #1d4ed8; color: #93c5fd;
+      padding: 3px 10px; border-radius: 5px; font-size: 12px;
+      display: flex; align-items: center; gap: 6px; font-family: monospace;
+    }
+    .ip-tag .rm { cursor: pointer; color: #555; font-size: 15px; line-height: 1; }
+    .ip-tag .rm:hover { color: #ef4444; }
+    .ip-empty { font-size: 12px; color: #444; }
+    .ip-input-row { display: flex; gap: 8px; }
+    .ip-input {
+      flex: 1; background: #0d0d0d; border: 1px solid #2a2a2a;
+      color: #e0e0e0; padding: 8px 12px; border-radius: 6px; font-size: 13px;
+      font-family: monospace;
+    }
+    .ip-input:focus { outline: none; border-color: #1d4ed8; }
+    .ip-input::placeholder { color: #444; }
+
+    /* Buttons */
+    .btn {
+      padding: 8px 16px; border-radius: 6px; border: none;
+      font-size: 13px; cursor: pointer; transition: opacity 0.15s; font-weight: 500;
+    }
+    .btn:hover { opacity: 0.8; }
+    .btn-primary { background: #1d4ed8; color: #fff; }
+    .btn-danger  { background: #b91c1c; color: #fff; }
+    .btn-ghost   { background: #1e1e1e; color: #aaa; border: 1px solid #2a2a2a; }
+    .btn-sm      { padding: 5px 11px; font-size: 12px; }
+
+    /* Stats table */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th {
+      background: #111; color: #555; padding: 9px 12px; text-align: left;
+      font-weight: 600; border-bottom: 1px solid #222; white-space: nowrap;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    td { padding: 8px 12px; border-bottom: 1px solid #1a1a1a; }
+    tr:hover td { background: #1a1a1a; }
+    td.ip-cell { font-family: monospace; font-size: 12px; color: #60a5fa; }
+    td.total-cell { font-weight: 700; color: #e0e0e0; }
+    .badge {
+      display: inline-block; padding: 1px 7px; border-radius: 4px;
+      font-size: 11px; font-weight: 600;
+    }
+    .badge-blue { background: #1e3a5f; color: #93c5fd; }
+    .badge-dim  { background: #1a1a1a; color: #444; }
+
+    /* Upload info */
+    .info-row { display: flex; align-items: center; gap: 24px; margin-bottom: 16px; }
+    .info-block { text-align: center; }
+    .info-stat { font-size: 28px; font-weight: 700; color: #fff; line-height: 1; }
+    .info-label { font-size: 11px; color: #555; margin-top: 4px; }
+    .divider-v { width: 1px; height: 44px; background: #222; }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: #15803d; color: #fff; padding: 11px 18px;
+      border-radius: 8px; font-size: 13px; opacity: 0;
+      transition: opacity 0.25s; pointer-events: none; z-index: 999;
+    }
+    .toast.err { background: #b91c1c; }
+    .toast.show { opacity: 1; }
+
+    .empty-msg { color: #444; font-size: 13px; padding: 20px 0; text-align: center; }
+    .mt16 { margin-top: 16px; }
+    .in-list-tag { font-size: 11px; color: #4ade80; background: #14532d; padding: 2px 8px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="dot"></div>
+  <h1>管理後台</h1>
+  <span class="status-badge status-open" id="header-status">不限制</span>
+</header>
+
+<main>
+
+  <!-- IP 存取控制 -->
+  <div class="card">
+    <div class="card-title">IP 存取控制</div>
+    <div class="toggle-group">
+      <button class="toggle-btn" id="btn-open"       onclick="setMode('open')">不限制</button>
+      <button class="toggle-btn" id="btn-restricted" onclick="setMode('restricted')">限制 IP</button>
+    </div>
+
+    <div class="ip-section" id="ip-section">
+      <div class="section-label" style="margin-top:14px;">允許的 IP 清單：</div>
+      <div class="ip-tags" id="ip-tags"><span class="ip-empty">尚無 IP</span></div>
+      <div class="ip-input-row">
+        <input class="ip-input" id="ip-input" type="text" placeholder="輸入 IPv4 或 IPv6，例如 2001:db8::1"
+               onkeydown="if(event.key==='Enter') addIp()">
+        <button class="btn btn-ghost" onclick="addIp()">新增</button>
+      </div>
+    </div>
+
+    <div class="mt16">
+      <button class="btn btn-primary" onclick="saveConfig()">儲存設定</button>
+    </div>
+  </div>
+
+  <!-- IP 請求統計 -->
+  <div class="card">
+    <div class="card-title">
+      <span>IP 請求統計</span>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-ghost btn-sm" onclick="clearLog()">清除 Log</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadStats()">重新整理</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table id="stats-table">
+        <thead id="stats-head"></thead>
+        <tbody id="stats-body"></tbody>
+      </table>
+      <div class="empty-msg" id="stats-empty" style="display:none;">尚無請求記錄</div>
+    </div>
+  </div>
+
+  <!-- GPS 記錄 -->
+  <div class="card">
+    <div class="card-title">
+      <span>GPS 定位記錄</span>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-ghost btn-sm" onclick="clearGps()">清除記錄</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadGps()">重新整理</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table id="gps-table">
+        <thead>
+          <tr>
+            <th>時間</th>
+            <th>IP 位址</th>
+            <th>緯度</th>
+            <th>經度</th>
+            <th>精確度 (m)</th>
+            <th>地圖</th>
+          </tr>
+        </thead>
+        <tbody id="gps-body"></tbody>
+      </table>
+      <div class="empty-msg" id="gps-empty" style="display:none;">尚無 GPS 記錄</div>
+    </div>
+  </div>
+
+  <!-- 上傳資料夾 -->
+  <div class="card">
+    <div class="card-title">上傳資料夾（uploads/）</div>
+    <div class="info-row">
+      <div class="info-block">
+        <div class="info-stat" id="file-count">—</div>
+        <div class="info-label">檔案數量</div>
+      </div>
+      <div class="divider-v"></div>
+      <div class="info-block">
+        <div class="info-stat" id="file-size">—</div>
+        <div class="info-label">MB</div>
+      </div>
+    </div>
+    <button class="btn btn-danger" onclick="cleanUploads()">清理 uploads 資料夾</button>
+  </div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  let currentMode = 'open';
+  let allowedIps  = [];
+
+  const CAT_ORDER = ['首頁','上傳截圖','上傳封面','上傳錨點','偵測Y','生成圖片','重載模板','標籤列表','標籤改名','其他'];
+
+  // ── Toast ──────────────────────────────────────────────
+  function toast(msg, err = false) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast' + (err ? ' err' : '') + ' show';
+    setTimeout(() => el.className = 'toast', 2800);
+  }
+
+  // ── Mode toggle ────────────────────────────────────────
+  function setMode(mode) {
+    currentMode = mode;
+    document.getElementById('btn-open').classList.toggle('active', mode === 'open');
+    document.getElementById('btn-restricted').classList.toggle('active', mode === 'restricted');
+    document.getElementById('ip-section').classList.toggle('visible', mode === 'restricted');
+    const badge = document.getElementById('header-status');
+    if (mode === 'open') {
+      badge.textContent = '不限制'; badge.className = 'status-badge status-open';
+    } else {
+      badge.textContent = '限制中'; badge.className = 'status-badge status-restricted';
+    }
+  }
+
+  // ── IP tags ────────────────────────────────────────────
+  function renderIpTags() {
+    const c = document.getElementById('ip-tags');
+    if (allowedIps.length === 0) {
+      c.innerHTML = '<span class="ip-empty">尚無 IP</span>';
+      return;
+    }
+    c.innerHTML = allowedIps.map((ip, i) =>
+      `<div class="ip-tag">${ip}<span class="rm" onclick="removeIp(${i})">×</span></div>`
+    ).join('');
+  }
+
+  function addIp() {
+    const input = document.getElementById('ip-input');
+    const ip = input.value.trim();
+    if (!ip || allowedIps.includes(ip)) { input.value = ''; return; }
+    allowedIps.push(ip);
+    renderIpTags();
+    input.value = '';
+  }
+
+  function removeIp(i) {
+    allowedIps.splice(i, 1);
+    renderIpTags();
+  }
+
+  function addIpFromTable(ip) {
+    if (allowedIps.includes(ip)) return;
+    allowedIps.push(ip);
+    renderIpTags();
+    // Switch to restricted mode automatically
+    if (currentMode !== 'restricted') setMode('restricted');
+    toast(`已加入：${ip}，記得儲存設定`);
+    // Re-render table to update button state
+    loadStats();
+  }
+
+  // ── Config API ─────────────────────────────────────────
+  async function loadConfig() {
+    const res = await fetch('/api/config');
+    const cfg = await res.json();
+    currentMode = cfg.ip_mode || 'open';
+    allowedIps  = cfg.allowed_ips || [];
+    setMode(currentMode);
+    renderIpTags();
+  }
+
+  async function saveConfig() {
+    const res = await fetch('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ ip_mode: currentMode, allowed_ips: allowedIps })
+    });
+    res.ok ? toast('設定已儲存') : toast('儲存失敗', true);
+  }
+
+  // ── Stats API ──────────────────────────────────────────
+  async function loadStats() {
+    const res  = await fetch('/api/stats');
+    const { stats } = await res.json();
+    const ips  = Object.keys(stats);
+    const head = document.getElementById('stats-head');
+    const body = document.getElementById('stats-body');
+    const empty = document.getElementById('stats-empty');
+
+    if (ips.length === 0) {
+      head.innerHTML = ''; body.innerHTML = '';
+      empty.style.display = 'block'; return;
+    }
+    empty.style.display = 'none';
+
+    // Collect used categories, keep predefined order first
+    const usedSet = new Set();
+    for (const d of Object.values(stats))
+      for (const k of Object.keys(d)) if (k !== '__total__') usedSet.add(k);
+    const cats = [
+      ...CAT_ORDER.filter(c => usedSet.has(c)),
+      ...[...usedSet].filter(c => !CAT_ORDER.includes(c))
+    ];
+
+    head.innerHTML = `<tr>
+      <th>IP 位址</th>
+      ${cats.map(c => `<th>${c}</th>`).join('')}
+      <th>總計</th>
+      <th></th>
+    </tr>`;
+
+    body.innerHTML = ips.map(ip => {
+      const d = stats[ip];
+      const cells = cats.map(c => {
+        const v = d[c] || 0;
+        return `<td>${v > 0
+          ? `<span class="badge badge-blue">${v}</span>`
+          : `<span class="badge badge-dim">0</span>`}</td>`;
+      }).join('');
+      const inList = allowedIps.includes(ip);
+      const addBtn = inList
+        ? `<span class="in-list-tag">已在白名單</span>`
+        : `<button class="btn btn-ghost btn-sm" onclick="addIpFromTable('${ip}')">加入白名單</button>`;
+      return `<tr>
+        <td class="ip-cell">${ip}</td>
+        ${cells}
+        <td class="total-cell">${d.__total__}</td>
+        <td>${addBtn}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function clearLog() {
+    if (!confirm('確定要清除所有 access.log 記錄？')) return;
+    await fetch('/api/clear_log', { method: 'POST' });
+    toast('Log 已清除');
+    loadStats();
+  }
+
+  // ── Upload folder ──────────────────────────────────────
+  async function loadUploadInfo() {
+    const res = await fetch('/api/upload_info');
+    const { count, size_mb } = await res.json();
+    document.getElementById('file-count').textContent = count;
+    document.getElementById('file-size').textContent  = size_mb;
+  }
+
+  async function cleanUploads() {
+    if (!confirm('確定要刪除 uploads/ 資料夾中的所有檔案嗎？')) return;
+    const res = await fetch('/api/clean', { method: 'POST' });
+    const { deleted, errors } = await res.json();
+    toast(`已刪除 ${deleted} 個檔案${errors ? `（${errors} 個失敗）` : ''}`);
+    loadUploadInfo();
+  }
+
+  // ── GPS log ────────────────────────────────────────────
+  async function loadGps() {
+    const res = await fetch('/api/gps_log');
+    const { records } = await res.json();
+    const body  = document.getElementById('gps-body');
+    const empty = document.getElementById('gps-empty');
+    if (!records.length) {
+      body.innerHTML = ''; empty.style.display = 'block'; return;
+    }
+    empty.style.display = 'none';
+    body.innerHTML = records.map(r => {
+      const mapsUrl = `https://www.google.com/maps?q=${r.lat},${r.lng}`;
+      const acc = r.accuracy != null ? r.accuracy : '—';
+      return `<tr>
+        <td style="white-space:nowrap;color:#888;font-size:11px;">${r.time}</td>
+        <td class="ip-cell">${r.ip}</td>
+        <td>${r.lat.toFixed(6)}</td>
+        <td>${r.lng.toFixed(6)}</td>
+        <td>${acc}</td>
+        <td><a href="${mapsUrl}" target="_blank" style="color:#60a5fa;font-size:12px;text-decoration:none;">檢視地圖 ↗</a></td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function clearGps() {
+    if (!confirm('確定要清除所有 GPS 記錄？')) return;
+    await fetch('/api/clear_gps', { method: 'POST' });
+    toast('GPS 記錄已清除');
+    loadGps();
+  }
+
+  // ── Init ───────────────────────────────────────────────
+  loadConfig();
+  loadStats();
+  loadGps();
+  loadUploadInfo();
+</script>
+</body>
+</html>

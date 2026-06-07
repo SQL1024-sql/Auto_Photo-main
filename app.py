@@ -9,6 +9,32 @@ import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 
 app = Flask(__name__)
+ACCESS_LOG_FILE   = os.path.join(os.path.dirname(__file__), 'access.log')
+ADMIN_CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'admin_config.json')
+
+def _load_admin_config():
+    try:
+        with open(ADMIN_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {'ip_mode': 'open', 'allowed_ips': []}
+
+@app.before_request
+def before_each_request():
+    ip = (request.headers.get('CF-Connecting-IP')
+          or request.headers.get('X-Forwarded-For', request.remote_addr))
+    if ip:
+        ip = ip.split(',')[0].strip()
+    ntime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    log_line = f"{ntime} | {ip} | {request.method} {request.path}\n"
+    print(log_line, end='')
+    with open(ACCESS_LOG_FILE, 'a', encoding='utf-8') as f:
+        f.write(log_line)
+    cfg = _load_admin_config()
+    if cfg.get('ip_mode') == 'restricted':
+        if ip not in cfg.get('allowed_ips', []):
+            return jsonify({'error': '存取被拒絕'}), 403
+
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 TAGS_FOLDER = os.path.join(os.path.dirname(__file__), 'filter_tags')
 SORT_TAGS_FOLDER = os.path.join(os.path.dirname(__file__), 'sort_tags')
@@ -41,7 +67,7 @@ def _save_tag_names(names):
 
 WIDTH_CONFIGS = {
     2048: {
-        'BOXES_X': [[512, 755], [768, 1011], [1024, 1267], [1281, 1523], [1537, 1780]],
+        'BOXES_X': [[511, 752], [768, 1010], [1026, 1267], [1283, 1524], [1540, 1782]],
         'FIXED_HEIGHT': 440,
     },
     2532: {
@@ -49,7 +75,7 @@ WIDTH_CONFIGS = {
         'FIXED_HEIGHT': 548,
     },
     2556: {
-        'BOXES_X': [[639, 940], [958, 1261], [1280, 1581], [1600, 1901], [1921, 2223]],
+        'BOXES_X': [[640, 939], [960, 1259], [1281, 1580], [1601, 1900], [1922, 2221]],
         'FIXED_HEIGHT': 551,
     },
     2622: {
@@ -318,14 +344,14 @@ def generate():
 
         piece_path = os.path.join(app.config['UPLOAD_FOLDER'], fname)
         if os.path.exists(piece_path):
-            p = Image.open(piece_path).convert('RGBA')
+            p = Image.open(piece_path).convert('RGB')
             p = p.resize((cell_w, cell_h), Image.LANCZOS)
-            grid_img.paste(p, (c * cell_w, r * cell_h), p)
+            grid_img.paste(p, (c * cell_w, r * cell_h))
 
     images_to_combine.append(grid_img)
 
     total_h = sum(img.height for img in images_to_combine)
-    final = Image.new('RGBA', (output_width, total_h))
+    final = Image.new('RGBA', (output_width, total_h), (26, 26, 26, 255))
     current_y = 0
     for img in images_to_combine:
         final.paste(img, (0, current_y), img)
@@ -339,4 +365,4 @@ def generate():
 
 if __name__ == '__main__':
     print("伺服器已啟動，請確認資料夾路徑是否有中文...")
-    app.run(debug=False, port=5000)
+    app.run(host='0.0.0.0', port=2000, debug=False)
