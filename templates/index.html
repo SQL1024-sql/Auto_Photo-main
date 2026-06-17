@@ -284,37 +284,45 @@ canvas {
 }
 .bank-stats span { color: var(--text-2); font-weight: 600; font-size: 13px; }
 
-.bank {
-  display: grid;
-  grid-template-columns: repeat(10, 1fr);
-  gap: 4px;
+.bank-scroll-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
+  cursor: grab;
+}
+.bank-scroll-wrap:active { cursor: grabbing; }
+.bank-scroll-wrap::-webkit-scrollbar { height: 4px; }
+.bank-scroll-wrap::-webkit-scrollbar-track { background: transparent; }
+.bank-scroll-wrap::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+.bank {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
   padding: 10px;
-  max-height: 430px;
-  overflow-y: auto;
+  width: max-content;
+  min-width: 100%;
 }
 .bank img {
-  width: 100%; aspect-ratio: 302 / 552;
+  width: 58px; height: 106px;
   object-fit: cover;
+  flex-shrink: 0;
   cursor: grab;
   border: 1px solid transparent;
   border-radius: 4px;
   background: var(--surface-3);
   transition: transform 0.15s, border-color 0.15s, opacity 0.2s;
   user-select: none;
+  touch-action: none;
 }
 .bank img:hover { transform: scale(1.07); border-color: var(--accent); position: relative; z-index: 1; }
 .bank img.used  { opacity: 0.2; filter: grayscale(70%); cursor: not-allowed; }
 .bank img.used:hover { transform: none; border-color: transparent; }
-.bank img { touch-action: none; }
 .bank img.td-src { outline: 2px solid var(--accent); outline-offset: 2px; opacity: 0.55; }
-.bank-empty { grid-column: 1/-1; text-align: center; padding: 36px; color: var(--text-3); font-size: 13px; }
-
-@media (max-width: 1400px) { .bank { grid-template-columns: repeat(8, 1fr); } }
-@media (max-width: 900px)  { .bank { grid-template-columns: repeat(5, 1fr); } }
-@media (max-width: 600px)  { .bank { grid-template-columns: repeat(4, 1fr); } }
+.bank-empty { padding: 36px 60px; color: var(--text-3); font-size: 13px; white-space: nowrap; }
 
 /* ══════════════════════════════
    GRID
@@ -469,6 +477,8 @@ label.upload-zone { touch-action: manipulation; -webkit-tap-highlight-color: tra
   <span class="brand">造型製圖工具</span>
   <span class="ver" id="ver-badge">v2556</span>
   <select id="width-select" onchange="switchWidth(this.value)">
+    <option value="1600">1600px</option>
+    <option value="1882">1882px</option>
     <option value="2048">2048px</option>
     <option value="2532">2532px</option>
     <option value="2556" selected>2556px</option>
@@ -617,8 +627,10 @@ label.upload-zone { touch-action: manipulation; -webkit-tap-highlight-color: tra
     </div>
     <div id="sort-tags-bar" class="sort-tags-bar" style="display:none;"></div>
     <div class="card-body" style="padding-top:12px;">
-      <div class="bank" id="bank">
-        <div class="bank-empty">尚無造型，請先完成切割步驟</div>
+      <div class="bank-scroll-wrap" id="bank-scroll-wrap">
+        <div class="bank" id="bank">
+          <div class="bank-empty">尚無造型，請先完成切割步驟</div>
+        </div>
       </div>
     </div>
   </div>
@@ -681,6 +693,8 @@ let images = [], cur = 0, cells = [], allPieces = [], dragSrc = null, coverFile 
 let sortTagOrder = [], activeTagFilter = null, _stcDragIdx = null;
 
 const WIDTH_CONFIGS = {
+    1600: { FIXED_H: 334, BOXES_X: [[410,593],[605,789],[801,984],[997,1180],[1193,1376]], y_offset: -296 },
+    1882: { FIXED_H: 406, BOXES_X: [[470,692],[706,928],[943,1164],[1179,1400],[1415,1637]], y_offset: -296 },
     2048: { FIXED_H: 440, BOXES_X: [[511,752],[768,1010],[1026,1267],[1283,1524],[1540,1782]], y_offset: -397 },
     2532: { FIXED_H: 548, BOXES_X: [[632,930],[950,1249],[1268,1567],[1586,1885],[1904,2203]], y_offset: -480 },
     2556: { FIXED_H: 551, BOXES_X: [[640,939],[960,1259],[1281,1580],[1601,1900],[1922,2221]], y_offset: -494 },
@@ -1188,7 +1202,7 @@ function changeImg(s) { cur = (cur + s + images.length) % images.length; showImg
                 td.g = mkGhost('/image/' + fn, bi.offsetWidth, bi.offsetHeight);
                 posGhost(td.g, td.sx, td.sy);
                 bi.classList.add('td-src');
-            }, 160);
+            }, 500);
             td = { type: 'bank', fn, sx: t.clientX, sy: t.clientY, moved: false, g: null, ready: false, timer, _bi: bi };
             return;
         }
@@ -1201,7 +1215,7 @@ function changeImg(s) { cur = (cur + s + images.length) % images.length; showImg
             const timer = setTimeout(() => {
                 if (!td || td._ci !== cell) return;
                 td.ready = true;
-            }, 200);
+            }, 500);
             td = { type: 'cell', fn: cells[idx], idx, sx: t.clientX, sy: t.clientY, lastX: t.clientX, moved: false, g: null, ready: false, scrolling: false, timer, _bi: null, _ci: cell };
         }
     }, { passive: true });
@@ -1215,16 +1229,22 @@ function changeImg(s) { cur = (cur + s + images.length) % images.length; showImg
         if (!td.ready) {
             if (td.scrolling) {
                 const delta = td.lastX - t.clientX;
-                document.getElementById('grid-wrap').scrollLeft += delta;
+                if (td.type === 'bank') {
+                    const bw = document.getElementById('bank-scroll-wrap');
+                    if (bw) bw.scrollLeft += delta;
+                } else {
+                    document.getElementById('grid-wrap').scrollLeft += delta;
+                }
                 td.lastX = t.clientX;
                 e.preventDefault();
                 return;
             }
             if (dist > 8) {
-                if (td.type === 'cell' && Math.abs(dx) > Math.abs(dy)) {
+                if (Math.abs(dx) > Math.abs(dy)) {
                     td.scrolling = true;
                     clearTimeout(td.timer);
                     td.lastX = t.clientX;
+                    if (td._bi) td._bi.classList.remove('td-src');
                 } else {
                     cancel();
                 }
@@ -1277,6 +1297,24 @@ function changeImg(s) { cur = (cur + s + images.length) % images.length; showImg
 
 initGrid();
 loadSortTags();
+
+// ── Bank mouse drag-to-scroll ──
+(function () {
+    const bw = document.getElementById('bank-scroll-wrap');
+    let dragging = false, startX = 0, scrollStart = 0;
+    bw.addEventListener('mousedown', e => {
+        if (e.target.closest('img')) return;
+        dragging = true; startX = e.clientX; scrollStart = bw.scrollLeft;
+        bw.style.userSelect = 'none';
+    });
+    window.addEventListener('mousemove', e => {
+        if (!dragging) return;
+        bw.scrollLeft = scrollStart - (e.clientX - startX);
+    });
+    window.addEventListener('mouseup', () => {
+        dragging = false; bw.style.userSelect = '';
+    });
+})();
 
 </script>
 </body>

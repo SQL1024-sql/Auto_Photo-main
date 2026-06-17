@@ -66,6 +66,14 @@ def _save_tag_names(names):
         json.dump(names, f, ensure_ascii=False, indent=2)
 
 WIDTH_CONFIGS = {
+    1600: {
+        'BOXES_X': [[410, 593], [605, 789], [801, 984], [997, 1180], [1193, 1376]],
+        'FIXED_HEIGHT': 334,
+    },
+    1882: {
+        'BOXES_X': [[470, 692], [706, 928], [943, 1164], [1179, 1400], [1415, 1637]],
+        'FIXED_HEIGHT': 406,
+    },
     2048: {
         'BOXES_X': [[511, 752], [768, 1010], [1026, 1267], [1283, 1524], [1540, 1782]],
         'FIXED_HEIGHT': 440,
