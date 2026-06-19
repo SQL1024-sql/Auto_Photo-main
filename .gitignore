@@ -1,3 +1,5 @@
 .png
 .jpg
 uploads/
+.vscode/
+.claude/
