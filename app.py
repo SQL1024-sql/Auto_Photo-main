@@ -114,6 +114,8 @@ def cv_imread_unicode(file_path):
         return None
 
 _template_cache = {'filter': [], 'weight': []}
+TEMPLATE_REF_WIDTH = 2556          # 模板擷取時的螢幕寬度（標籤以此尺度製作）
+_scaled_cache = {}                 # width -> (filter_list, weight_list)
 
 def _load_templates_from_folder(folder, is_filter=False):
     results = []
@@ -138,6 +140,7 @@ def reload_templates():
         _load_templates_from_folder(SORT_TAGS_FOLDER) +
         _load_templates_from_folder(SPECIAL_TAGS_FOLDER)
     )
+    _scaled_cache.clear()
     print(f"[模板快取] filter={len(_template_cache['filter'])}, weight={len(_template_cache['weight'])}")
 
 reload_templates()
@@ -153,8 +156,34 @@ if multiprocessing.current_process().name == 'MainProcess':
 else:
     _executor = None
 
-def get_matching_info(roi):
-    for tag_name, template, _ in _template_cache['filter']:
+def _scaled_templates(width):
+    """依上傳寬度相對於 TEMPLATE_REF_WIDTH 的比例縮放模板。
+    cv2.matchTemplate 不具縮放不變性，模板在 2556 擷取，
+    上傳其他寬度（如 1882）時標籤較小，需同步縮放模板才能比中。"""
+    try:
+        w = int(width)
+    except (TypeError, ValueError):
+        w = TEMPLATE_REF_WIDTH
+    if w == TEMPLATE_REF_WIDTH:
+        return _template_cache['filter'], _template_cache['weight']
+    cached = _scaled_cache.get(w)
+    if cached is not None:
+        return cached
+    scale = w / float(TEMPLATE_REF_WIDTH)
+    interp = cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC
+    def _do(lst):
+        out = []
+        for fname, img, weight in lst:
+            simg = cv2.resize(img, None, fx=scale, fy=scale, interpolation=interp)
+            out.append((fname, simg, weight))
+        return out
+    cached = (_do(_template_cache['filter']), _do(_template_cache['weight']))
+    _scaled_cache[w] = cached
+    return cached
+
+def get_matching_info(roi, width=TEMPLATE_REF_WIDTH):
+    filter_templates, weight_templates = _scaled_templates(width)
+    for tag_name, template, _ in filter_templates:
         if template.shape[0] > roi.shape[0] or template.shape[1] > roi.shape[1]:
             continue
         _, max_val, _, _ = cv2.minMaxLoc(cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED))
@@ -165,7 +194,7 @@ def get_matching_info(roi):
             return True, 0
 
     max_weight = 0
-    for _, template, weight in _template_cache['weight']:
+    for _, template, weight in weight_templates:
         if template.shape[0] > roi.shape[0] or template.shape[1] > roi.shape[1]:
             continue
         _, max_val, _, _ = cv2.minMaxLoc(cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED))
@@ -278,14 +307,14 @@ def upload_cover():
     return jsonify({'filename': fname})
 
 def _process_piece(args):
-    raw_bytes, i, x1, x2, y_top, strip_id, upload_folder, fixed_height = args
+    raw_bytes, i, x1, x2, y_top, strip_id, upload_folder, fixed_height, width = args
     import io as _io
     img = Image.open(_io.BytesIO(raw_bytes)).convert('RGBA')
     piece = img.crop((x1, y_top, x2, y_top + fixed_height))
     bgr = cv2.cvtColor(np.array(piece.convert('RGB')), cv2.COLOR_RGB2BGR)
     w = bgr.shape[1]
     roi = bgr[0:130, int(w * 0.4):w]
-    is_filter, weight = get_matching_info(roi)
+    is_filter, weight = get_matching_info(roi, width)
     if is_filter:
         return None
     pname = f'w{weight:03d}_{strip_id}_{i}.png'
@@ -302,13 +331,14 @@ def upload_strip():
     cfg = get_config(request.form.get('width'))
     BOXES_X = cfg['BOXES_X']
     FIXED_HEIGHT = cfg['FIXED_HEIGHT']
+    width_val = request.form.get('width', TEMPLATE_REF_WIDTH)
 
     strip_id = uuid.uuid4().hex
     raw_bytes = f.read()
     upload_folder = app.config['UPLOAD_FOLDER']
 
     args_list = [
-        (raw_bytes, i, x1, x2, y_top, strip_id, upload_folder, FIXED_HEIGHT)
+        (raw_bytes, i, x1, x2, y_top, strip_id, upload_folder, FIXED_HEIGHT, width_val)
         for i, (x1, x2) in enumerate(BOXES_X)
     ]
 
